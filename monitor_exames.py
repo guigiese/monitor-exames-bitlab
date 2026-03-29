@@ -4,27 +4,30 @@ Detecta novas requisições e mudanças de status, notifica via WhatsApp (Callme
 """
 
 import json
+import os
 import time
 import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 
 # ============================================================
-# CONFIGURAÇÃO
+# CONFIGURAÇÃO — lida de variáveis de ambiente
 # ============================================================
-WHATSAPP_PHONE   = "555197529191"
-CALLMEBOT_APIKEY = "4137541"
+import os
 
-API_BASE   = "https://bitlabenterprise.com.br/bioanalises/api/v1"
-USUARIO    = "11702"
-SENHA      = "melanie"
-CD_CONVENIO = 1170
-CD_POSTO    = 8
+WHATSAPP_PHONE   = os.environ.get("WHATSAPP_PHONE",   "555197529191")
+CALLMEBOT_APIKEY = os.environ.get("CALLMEBOT_APIKEY", "4137541")
 
-INTERVALO_MINUTOS = 5
-DIAS_ATRAS        = 30
+API_BASE    = "https://bitlabenterprise.com.br/bioanalises/api/v1"
+USUARIO     = os.environ.get("BITLAB_USUARIO",  "11702")
+SENHA       = os.environ.get("BITLAB_SENHA",    "melanie")
+CD_CONVENIO = int(os.environ.get("CD_CONVENIO", "1170"))
+CD_POSTO    = int(os.environ.get("CD_POSTO",    "8"))
 
-ESTADO_ARQUIVO = Path(__file__).parent / "estado_exames.json"
+INTERVALO_MINUTOS = int(os.environ.get("INTERVALO_MINUTOS", "5"))
+DIAS_ATRAS        = int(os.environ.get("DIAS_ATRAS",        "30"))
+
+ESTADO_ARQUIVO = Path("/tmp/estado_exames.json")
 # ============================================================
 
 
