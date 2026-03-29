@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block header %}Configurações{% endblock %}
+{% block content %}
+
+<div class="bg-white rounded-xl border shadow-sm p-6 max-w-lg">
+  <h2 class="font-semibold text-gray-700 mb-4">Intervalo de verificação</h2>
+  <form hx-post="/settings/interval"
+        hx-target="#interval-result"
+        hx-swap="innerHTML"
+        class="flex items-center gap-3">
+    <input type="number" name="minutes"
+           value="{{ config.interval_minutes }}" min="1" max="60"
+           class="border rounded-lg px-3 py-2 w-24 text-sm">
+    <span class="text-sm text-gray-500">minutos</span>
+    <button type="submit"
+            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
+      Salvar
+    </button>
+  </form>
+  <div id="interval-result" class="mt-2 min-h-[20px]"></div>
+</div>
+
+{% endblock %}

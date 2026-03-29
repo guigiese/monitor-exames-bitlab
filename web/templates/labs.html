@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block header %}Laboratórios{% endblock %}
+{% block content %}
+
+<div class="space-y-4">
+  {% for lab in labs %}
+  <div class="bg-white rounded-xl border shadow-sm p-5">
+    <div class="flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <h3 class="font-semibold text-gray-800 text-lg">{{ lab.name }}</h3>
+        <p class="text-sm text-gray-500 mt-1">Conector: <code class="bg-gray-100 px-1 rounded">{{ lab.connector }}</code></p>
+        {% if last_check.get(lab.id) %}
+        <p class="text-xs text-gray-400 mt-1">Último check: {{ last_check[lab.id] }}</p>
+        {% endif %}
+        {% if last_error.get(lab.id) %}
+        <p class="text-xs text-red-500 mt-1">⚠ {{ last_error[lab.id] }}</p>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <!-- Toggle -->
+        <div id="toggle-{{ lab.id }}">
+          {% set enabled = lab.get("enabled", true) %}
+          <div class="flex items-center gap-3">
+            <span class="text-sm px-2 py-1 rounded-full
+              {% if enabled %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-500{% endif %}">
+              {% if enabled %}Habilitado{% else %}Desabilitado{% endif %}
+            </span>
+            <button hx-post="/labs/{{ lab.id }}/toggle"
+                    hx-target="#toggle-{{ lab.id }}"
+                    hx-swap="outerHTML"
+                    class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
+              {% if enabled %}Desabilitar{% else %}Habilitar{% endif %}
+            </button>
+          </div>
+        </div>
+        <!-- Test -->
+        <div class="flex items-center gap-2">
+          <button hx-post="/labs/{{ lab.id }}/test"
+                  hx-target="#test-result-{{ lab.id }}"
+                  hx-indicator="#spinner-{{ lab.id }}"
+                  class="text-sm px-3 py-1 rounded border border-indigo-300 text-indigo-600 hover:bg-indigo-50">
+            Testar conexão
+          </button>
+          <span id="spinner-{{ lab.id }}" class="htmx-indicator text-xs text-gray-400">…</span>
+        </div>
+      </div>
+    </div>
+    <div id="test-result-{{ lab.id }}" class="mt-2 min-h-[20px]"></div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

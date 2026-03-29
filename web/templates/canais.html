@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block header %}Canais de Notificação{% endblock %}
+{% block content %}
+
+<div class="space-y-4">
+  {% for n in notifiers %}
+  <div class="bg-white rounded-xl border shadow-sm p-5">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <h3 class="font-semibold text-gray-800 text-lg capitalize">{{ n.id }}</h3>
+        <p class="text-sm text-gray-500 mt-1">Tipo: <code class="bg-gray-100 px-1 rounded">{{ n.type }}</code></p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <!-- Toggle -->
+        <div id="toggle-{{ n.id }}">
+          {% set enabled = n.get("enabled", true) %}
+          <div class="flex items-center gap-3">
+            <span class="text-sm px-2 py-1 rounded-full
+              {% if enabled %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-500{% endif %}">
+              {% if enabled %}Habilitado{% else %}Desabilitado{% endif %}
+            </span>
+            <button hx-post="/canais/{{ n.id }}/toggle"
+                    hx-target="#toggle-{{ n.id }}"
+                    hx-swap="outerHTML"
+                    class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
+              {% if enabled %}Desabilitar{% else %}Habilitar{% endif %}
+            </button>
+          </div>
+        </div>
+        <!-- Test -->
+        <div class="flex items-center gap-2">
+          <button hx-post="/canais/{{ n.id }}/test"
+                  hx-target="#test-result-{{ n.id }}"
+                  class="text-sm px-3 py-1 rounded border border-indigo-300 text-indigo-600 hover:bg-indigo-50">
+            Enviar teste
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="test-result-{{ n.id }}" class="mt-2 min-h-[20px]"></div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

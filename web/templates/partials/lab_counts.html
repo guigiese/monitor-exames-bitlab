@@ -1,0 +1,43 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+{% for lid, info in lab_counts.items() %}
+<div class="bg-white rounded-xl border shadow-sm p-5">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="font-semibold text-gray-800">{{ info.name }}</h3>
+    <div class="flex items-center gap-2">
+      {% if info.checking %}
+        <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 animate-pulse">Verificando…</span>
+      {% elif info.error %}
+        <span class="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Erro</span>
+      {% elif info.last_check != "—" %}
+        <span class="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">OK</span>
+      {% else %}
+        <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-400">Aguardando</span>
+      {% endif %}
+      {% if not info.enabled %}
+        <span class="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-600">Desabilitado</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="grid grid-cols-3 gap-3 text-center">
+    <div class="bg-green-50 rounded-lg p-3">
+      <p class="text-2xl font-bold text-green-700">{{ info.pronto }}</p>
+      <p class="text-xs text-gray-500 mt-1">Prontos</p>
+    </div>
+    <div class="bg-yellow-50 rounded-lg p-3">
+      <p class="text-2xl font-bold text-yellow-600">{{ info.andamento }}</p>
+      <p class="text-xs text-gray-500 mt-1">Em andamento</p>
+    </div>
+    <div class="bg-gray-50 rounded-lg p-3">
+      <p class="text-2xl font-bold text-gray-600">{{ info.total }}</p>
+      <p class="text-xs text-gray-500 mt-1">Total</p>
+    </div>
+  </div>
+  <p class="text-xs text-gray-400 mt-3">Último check: {{ info.last_check }}</p>
+  {% if info.error %}
+  <p class="text-xs text-red-500 mt-1 truncate">{{ info.error }}</p>
+  {% endif %}
+</div>
+{% else %}
+<p class="text-gray-400 col-span-2 text-center py-8">Aguardando primeiro ciclo de verificação…</p>
+{% endfor %}
+</div>
