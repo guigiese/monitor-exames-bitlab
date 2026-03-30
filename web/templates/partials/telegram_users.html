@@ -4,7 +4,7 @@
     {% for uid in telegram_users %}
     <li class="flex items-center justify-between py-2 text-sm">
       <span class="font-mono text-gray-700">{{ uid }}</span>
-      <button hx-post="/canais/telegram/users/{{ uid }}/remove"
+      <button hx-post="/labmonitor/canais/telegram/users/{{ uid }}/remove"
               hx-target="#telegram-users-list"
               hx-swap="outerHTML"
               hx-confirm="Remover este usuário da lista de notificações?"

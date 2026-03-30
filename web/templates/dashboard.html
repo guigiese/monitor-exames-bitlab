@@ -4,7 +4,7 @@
 
 <!-- Lab cards (auto-refresh 60s) -->
 <div id="lab-counts"
-     hx-get="/partials/lab_counts" hx-trigger="every 60s" hx-swap="innerHTML">
+     hx-get="/labmonitor/partials/lab_counts" hx-trigger="every 60s" hx-swap="innerHTML">
   {% include "partials/lab_counts.html" %}
 </div>
 
@@ -15,7 +15,7 @@
     <span class="text-xs text-gray-400">atualiza a cada 30s</span>
   </div>
   <div id="notif-feed"
-       hx-get="/partials/notifications" hx-trigger="every 30s" hx-swap="innerHTML">
+       hx-get="/labmonitor/partials/notifications" hx-trigger="every 30s" hx-swap="innerHTML">
     {% include "partials/notifications.html" %}
   </div>
 </div>

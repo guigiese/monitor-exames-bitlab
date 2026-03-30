@@ -3,7 +3,7 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, APIRouter
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -33,6 +33,7 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan, title="Lab Monitor")
+router = APIRouter(prefix="/labmonitor")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,16 +42,24 @@ def _render(request, template, **ctx):
     return templates.TemplateResponse(template, {"request": request, **ctx})
 
 
-# ── Pages ─────────────────────────────────────────────────────────────────────
+# ── Landing page ──────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
+async def landing(request: Request):
+    return _render(request, "index.html")
+
+
+# ── Lab Monitor Pages ─────────────────────────────────────────────────────────
+
+@router.get("", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return _render(request, "dashboard.html",
                    lab_counts=state.get_lab_counts(),
                    notifications=state.notifications)
 
 
-@app.get("/exames", response_class=HTMLResponse)
+@router.get("/exames", response_class=HTMLResponse)
 async def exames(request: Request, lab: str = "", status: str = ""):
     labs_cfg = state.config["labs"]
     statuses = sorted({i["status"]
@@ -65,7 +74,7 @@ async def exames(request: Request, lab: str = "", status: str = ""):
                    status_filter=status)
 
 
-@app.get("/labs", response_class=HTMLResponse)
+@router.get("/labs", response_class=HTMLResponse)
 async def labs_page(request: Request):
     return _render(request, "labs.html",
                    labs=state.config["labs"],
@@ -73,14 +82,14 @@ async def labs_page(request: Request):
                    last_error=state.last_error)
 
 
-@app.get("/canais", response_class=HTMLResponse)
+@router.get("/canais", response_class=HTMLResponse)
 async def canais_page(request: Request):
     return _render(request, "canais.html",
                    notifiers=state.config["notifiers"],
                    telegram_users=get_users())
 
 
-@app.get("/settings", response_class=HTMLResponse)
+@router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return _render(request, "settings.html",
                    config=state.config)
@@ -88,25 +97,25 @@ async def settings_page(request: Request):
 
 # ── HTMX Partials ─────────────────────────────────────────────────────────────
 
-@app.get("/partials/notifications", response_class=HTMLResponse)
+@router.get("/partials/notifications", response_class=HTMLResponse)
 async def partial_notifications(request: Request):
     return _render(request, "partials/notifications.html",
                    notifications=state.notifications)
 
 
-@app.get("/partials/lab_counts", response_class=HTMLResponse)
+@router.get("/partials/lab_counts", response_class=HTMLResponse)
 async def partial_lab_counts(request: Request):
     return _render(request, "partials/lab_counts.html",
                    lab_counts=state.get_lab_counts())
 
 
-@app.get("/partials/exames", response_class=HTMLResponse)
+@router.get("/partials/exames", response_class=HTMLResponse)
 async def partial_exames(request: Request, lab: str = "", status: str = ""):
     return _render(request, "partials/exames_table.html",
                    rows=state.get_exames(lab, status))
 
 
-@app.get("/partials/telegram-users", response_class=HTMLResponse)
+@router.get("/partials/telegram-users", response_class=HTMLResponse)
 async def partial_telegram_users(request: Request):
     return _render(request, "partials/telegram_users.html",
                    telegram_users=get_users())
@@ -114,21 +123,21 @@ async def partial_telegram_users(request: Request):
 
 # ── Actions ───────────────────────────────────────────────────────────────────
 
-@app.post("/labs/{lab_id}/toggle", response_class=HTMLResponse)
+@router.post("/labs/{lab_id}/toggle", response_class=HTMLResponse)
 async def toggle_lab(request: Request, lab_id: str):
     state.toggle_lab(lab_id)
     lab = next(l for l in state.config["labs"] if l["id"] == lab_id)
-    return HTMLResponse(_toggle_html("lab", lab_id, lab.get("enabled", True), lab["name"]))
+    return HTMLResponse(_toggle_html("labs", lab_id, lab.get("enabled", True), lab["name"]))
 
 
-@app.post("/canais/{notifier_id}/toggle", response_class=HTMLResponse)
+@router.post("/canais/{notifier_id}/toggle", response_class=HTMLResponse)
 async def toggle_notifier(request: Request, notifier_id: str):
     state.toggle_notifier(notifier_id)
     n = next(x for x in state.config["notifiers"] if x["id"] == notifier_id)
     return HTMLResponse(_toggle_html("canais", notifier_id, n.get("enabled", True), n["id"].capitalize()))
 
 
-@app.post("/labs/{lab_id}/test", response_class=HTMLResponse)
+@router.post("/labs/{lab_id}/test", response_class=HTMLResponse)
 async def test_lab(lab_id: str):
     lab_cfg = next((l for l in state.config["labs"] if l["id"] == lab_id), None)
     if not lab_cfg or lab_cfg["connector"] not in CONNECTORS:
@@ -141,7 +150,7 @@ async def test_lab(lab_id: str):
         return HTMLResponse(f'<span class="text-red-600 text-sm">✗ Erro: {e}</span>')
 
 
-@app.post("/canais/{notifier_id}/test", response_class=HTMLResponse)
+@router.post("/canais/{notifier_id}/test", response_class=HTMLResponse)
 async def test_notifier(notifier_id: str):
     n_cfg = next((n for n in state.config["notifiers"] if n["id"] == notifier_id), None)
     if not n_cfg or n_cfg["type"] not in NOTIFIERS:
@@ -154,14 +163,14 @@ async def test_notifier(notifier_id: str):
         return HTMLResponse(f'<span class="text-red-600 text-sm">✗ Erro: {e}</span>')
 
 
-@app.post("/canais/telegram/users/{chat_id}/remove", response_class=HTMLResponse)
+@router.post("/canais/telegram/users/{chat_id}/remove", response_class=HTMLResponse)
 async def remove_telegram_user(request: Request, chat_id: str):
     remove_user(chat_id)
     return _render(request, "partials/telegram_users.html",
                    telegram_users=get_users())
 
 
-@app.post("/settings/interval", response_class=HTMLResponse)
+@router.post("/settings/interval", response_class=HTMLResponse)
 async def save_interval(minutes: int = Form(...)):
     state.set_interval(max(1, minutes))
     return HTMLResponse(f'<span class="text-green-600 text-sm">✓ Intervalo atualizado para {minutes} min</span>')
@@ -175,8 +184,11 @@ def _toggle_html(route: str, id: str, enabled: bool, label: str) -> str:
     return f'''
     <div id="toggle-{id}" class="flex items-center gap-3">
       <span class="text-sm px-2 py-1 rounded-full {color}">{text}</span>
-      <button hx-post="/{route}/{id}/toggle" hx-target="#toggle-{id}" hx-swap="outerHTML"
+      <button hx-post="/labmonitor/{route}/{id}/toggle" hx-target="#toggle-{id}" hx-swap="outerHTML"
               class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
         {"Desabilitar" if enabled else "Habilitar"}
       </button>
     </div>'''
+
+
+app.include_router(router)

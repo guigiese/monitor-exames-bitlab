@@ -20,14 +20,14 @@
     Filtrar
   </button>
   {% if lab_filter or status_filter %}
-  <a href="/exames" class="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50 text-gray-600">Limpar</a>
+  <a href="/labmonitor/exames" class="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50 text-gray-600">Limpar</a>
   {% endif %}
 </form>
 
 <!-- Tabela -->
 <div class="bg-white rounded-xl border shadow-sm p-5"
      id="exames-table"
-     hx-get="/partials/exames?lab={{ lab_filter }}&status={{ status_filter }}"
+     hx-get="/labmonitor/partials/exames?lab={{ lab_filter }}&status={{ status_filter }}"
      hx-trigger="every 5m"
      hx-swap="innerHTML">
   {% include "partials/exames_table.html" %}

@@ -44,11 +44,11 @@
       </button>
     </div>
     <nav class="flex-1 p-3 space-y-1 text-sm overflow-y-auto">
-      {% set nav = [("/","📊","Dashboard"),("/exames","🧪","Exames"),("/labs","🏥","Laboratórios"),("/canais","📨","Canais"),("/settings","⚙️","Configurações")] %}
+      {% set nav = [("/labmonitor","📊","Dashboard"),("/labmonitor/exames","🧪","Exames"),("/labmonitor/labs","🏥","Laboratórios"),("/labmonitor/canais","📨","Canais"),("/labmonitor/settings","⚙️","Configurações")] %}
       {% for href, icon, label in nav %}
       <a href="{{ href }}" onclick="closeSidebar()"
          class="flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium
-                {% if request.url.path == href %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+                {% if request.url.path == href or request.url.path == href + '/' %}bg-indigo-50 text-indigo-700{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
         {{ icon }} {{ label }}
       </a>
       {% endfor %}

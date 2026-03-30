@@ -19,7 +19,7 @@
               {% if enabled %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-500{% endif %}">
               {% if enabled %}Habilitado{% else %}Desabilitado{% endif %}
             </span>
-            <button hx-post="/canais/{{ n.id }}/toggle"
+            <button hx-post="/labmonitor/canais/{{ n.id }}/toggle"
                     hx-target="#toggle-{{ n.id }}"
                     hx-swap="outerHTML"
                     class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
@@ -29,7 +29,7 @@
         </div>
         <!-- Test -->
         <div class="flex items-center gap-2">
-          <button hx-post="/canais/{{ n.id }}/test"
+          <button hx-post="/labmonitor/canais/{{ n.id }}/test"
                   hx-target="#test-result-{{ n.id }}"
                   class="text-sm px-3 py-1 rounded border border-indigo-300 text-indigo-600 hover:bg-indigo-50">
             Enviar teste
@@ -45,7 +45,7 @@
       <div class="flex items-center justify-between mb-3">
         <h4 class="text-sm font-semibold text-gray-700">Usuários inscritos</h4>
         <span class="text-xs text-gray-400"
-              hx-get="/partials/telegram-users"
+              hx-get="/labmonitor/partials/telegram-users"
               hx-trigger="every 10s"
               hx-target="#telegram-users-list"
               hx-swap="outerHTML"></span>
