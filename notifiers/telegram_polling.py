@@ -1,31 +1,29 @@
 """
-Polling loop para receber comandos do Telegram Bot.
+Processamento de comandos do Telegram Bot.
+
+Não faz polling — recebe updates via webhook (POST do Telegram para FastAPI).
+O webhook é registrado automaticamente no startup da aplicação.
 
 Comandos reconhecidos:
-  /start    — boas-vindas e lista de comandos (sem info sensível)
+  /start    — boas-vindas e lista de comandos
+  /ajuda    — alias de /start
   /assinar  — inscreve o usuário para receber notificações
   /sair     — remove o usuário da lista
   /status   — informa se o usuário está inscrito
-
-Singleton: apenas uma instância de polling roda por processo.
-Ao iniciar, drena updates pendentes para evitar processar comandos antigos.
+  /testar   — envia ao usuário uma notificação de teste no formato real
 """
 
 import os
-import threading
-import time
-
 import requests
-
-from .telegram import add_user, get_users, remove_user, get_user_ids
+from .telegram import add_user, get_user_ids, remove_user
 
 _TOKEN = os.environ.get("TELEGRAM_TOKEN", "8704375512:AAFs8ICnxKAphbFscOK9NKNbpzWwyYTB4tA")
 
-_polling_lock = threading.Lock()
-_polling_started = False
+WEBHOOK_SECRET_PATH = "tg_wh_pb"  # path component que autentica o webhook
 
 
-def _send(token: str, chat_id, text: str):
+def _send(chat_id, text: str, token: str | None = None):
+    token = token or _TOKEN
     try:
         requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
@@ -36,121 +34,123 @@ def _send(token: str, chat_id, text: str):
         print(f"[TelegramBot] Erro ao responder {chat_id}: {e}")
 
 
-def _get_initial_offset(token: str) -> int:
-    """
-    Drena updates pendentes e retorna o próximo offset a usar.
-    Isso garante que comandos enviados enquanto o bot estava offline
-    não sejam processados ao reiniciar.
-    """
-    try:
-        resp = requests.get(
-            f"https://api.telegram.org/bot{token}/getUpdates",
-            params={"offset": -1, "timeout": 0},
-            timeout=10,
-        )
-        if resp.ok:
-            updates = resp.json().get("result", [])
-            if updates:
-                latest_id = updates[-1]["update_id"]
-                # Acknowledge all pending updates
-                requests.get(
-                    f"https://api.telegram.org/bot{token}/getUpdates",
-                    params={"offset": latest_id + 1, "timeout": 0},
-                    timeout=10,
-                )
-                return latest_id + 1
-    except Exception as e:
-        print(f"[TelegramBot] Erro ao inicializar offset: {e}")
-    return 0
+def handle_update(update: dict, token: str | None = None):
+    """Processa um update recebido via webhook. Cada update gera no máximo UMA resposta."""
+    token = token or _TOKEN
 
-
-def _handle_update(token: str, update: dict):
-    message = update.get("message") or update.get("edited_message")
+    message = update.get("message")
     if not message:
-        return
+        return  # ignora edited_message, channel_post, etc.
 
     chat_id = str(message["chat"]["id"])
-    text = (message.get("text") or "").strip().lower()
+    raw_text = (message.get("text") or "").strip()
 
+    # Normaliza: lowercase, remove @botname
+    text = raw_text.lower()
     if text.startswith("/"):
         text = text.split("@")[0]
 
-    # Extract user info from Telegram (phone number not available via Bot API)
     from_user = message.get("from", {})
     first_name = from_user.get("first_name", "")
-    last_name = from_user.get("last_name", "")
-    name = f"{first_name} {last_name}".strip()
-    username = from_user.get("username", "")
+    last_name  = from_user.get("last_name", "")
+    name       = f"{first_name} {last_name}".strip()
+    username   = from_user.get("username", "")
 
-    if text == "/start":
-        _send(token, chat_id,
+    # ── /start ou /ajuda ──────────────────────────────────────────────────────
+    if text in ("/start", "/ajuda"):
+        _send(chat_id,
               "👋 <b>Olá! Bem-vindo(a)!</b>\n\n"
-              "Este bot envia notificações automáticas de resultados.\n\n"
-              "📋 Comandos disponíveis:\n"
+              "Este bot envia notificações automáticas de resultados laboratoriais.\n\n"
+              "📋 <b>Comandos disponíveis:</b>\n"
               "• /assinar — receber notificações\n"
               "• /sair — cancelar inscrição\n"
-              "• /status — verificar sua situação")
+              "• /status — verificar sua situação\n"
+              "• /testar — receber uma notificação de exemplo\n"
+              "• /ajuda — exibir esta mensagem", token)
 
+    # ── /assinar ──────────────────────────────────────────────────────────────
     elif text in ("/assinar", "/subscribe"):
-        if add_user(chat_id, name=name, username=username):
-            _send(token, chat_id,
+        novo = add_user(chat_id, name=name, username=username)
+        if novo:
+            _send(chat_id,
                   "✅ <b>Inscrito com sucesso!</b>\n\n"
-                  "Você passará a receber notificações automaticamente.\n\n"
-                  "Para cancelar, envie /sair.")
+                  "Você receberá notificações quando novos exames entrarem "
+                  "ou quando um resultado for liberado.\n\n"
+                  "Para cancelar, envie /sair.", token)
         else:
-            _send(token, chat_id,
+            _send(chat_id,
                   "ℹ️ Você <b>já está inscrito</b> e receberá as notificações normalmente.\n\n"
-                  "Para cancelar, envie /sair.")
+                  "Para cancelar, envie /sair.", token)
 
+    # ── /sair ─────────────────────────────────────────────────────────────────
     elif text in ("/sair", "/cancelar", "/unsubscribe"):
-        if remove_user(chat_id):
-            _send(token, chat_id,
+        removed = remove_user(chat_id)
+        if removed:
+            _send(chat_id,
                   "👋 Você foi <b>removido</b> da lista de notificações.\n\n"
-                  "Para se inscrever novamente, envie /assinar.")
+                  "Para se inscrever novamente, envie /assinar.", token)
         else:
-            _send(token, chat_id,
-                  "ℹ️ Você não está na lista de notificações.")
+            _send(chat_id,
+                  "ℹ️ Você não está na lista de notificações.\n\n"
+                  "Envie /assinar para se inscrever.", token)
 
+    # ── /status ───────────────────────────────────────────────────────────────
     elif text == "/status":
         if chat_id in get_user_ids():
-            _send(token, chat_id, "✅ Você está inscrito e receberá notificações.\n\nPara cancelar, envie /sair.")
+            _send(chat_id,
+                  "✅ Você está <b>inscrito</b> e receberá notificações.\n\n"
+                  "Para cancelar, envie /sair.", token)
         else:
-            _send(token, chat_id, "❌ Você não está inscrito.\n\nEnvie /assinar para se inscrever.")
+            _send(chat_id,
+                  "❌ Você <b>não está inscrito</b>.\n\n"
+                  "Envie /assinar para se inscrever.", token)
+
+    # ── /testar ───────────────────────────────────────────────────────────────
+    elif text == "/testar":
+        _send(chat_id,
+              "✅ <b>Resultado disponível — BioAnálises (BitLab)</b>\n"
+              "👤 Bolinha - Maria Silva\n"
+              "🔬 Hemograma Completo\n"
+              "📊 Em Andamento → Pronto\n\n"
+              "<i>Esta é uma notificação de teste. Notificações reais "
+              "chegam neste mesmo formato.</i>", token)
+
+    # ── ignora qualquer outra coisa ───────────────────────────────────────────
+    # (não responde a mensagens de texto livres — evita spam acidental)
 
 
-def run_bot_polling(token: str | None = None):
-    """
-    Roda em background thread. Singleton — ignora chamadas duplicadas.
-    Drena updates pendentes ao iniciar para evitar processar comandos antigos.
-    """
-    global _polling_started
-    with _polling_lock:
-        if _polling_started:
-            print("[TelegramBot] Polling já ativo — ignorando segunda chamada.")
-            return
-        _polling_started = True
-
+def register_webhook(base_url: str, token: str | None = None):
+    """Registra o webhook no Telegram. Chamado no startup da aplicação."""
     token = token or _TOKEN
-    if not token:
-        print("[TelegramBot] Token não configurado — polling desativado.")
-        return
+    webhook_url = f"{base_url.rstrip('/')}/telegram/webhook/{WEBHOOK_SECRET_PATH}"
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={
+                "url": webhook_url,
+                "allowed_updates": ["message"],
+                "drop_pending_updates": True,   # descarta updates acumulados offline
+            },
+            timeout=10,
+        )
+        result = r.json()
+        if result.get("ok"):
+            print(f"[TelegramBot] Webhook registrado: {webhook_url}")
+        else:
+            print(f"[TelegramBot] Falha ao registrar webhook: {result}")
+    except Exception as e:
+        print(f"[TelegramBot] Erro ao registrar webhook: {e}")
 
-    print("[TelegramBot] Polling iniciado.")
-    offset = _get_initial_offset(token)
-    print(f"[TelegramBot] Offset inicial: {offset} (updates anteriores ignorados)")
 
-    while True:
-        try:
-            resp = requests.get(
-                f"https://api.telegram.org/bot{token}/getUpdates",
-                params={"offset": offset, "timeout": 30, "allowed_updates": ["message"]},
-                timeout=40,
-            )
-            if resp.ok:
-                updates = resp.json().get("result", [])
-                for update in updates:
-                    _handle_update(token, update)
-                    offset = update["update_id"] + 1
-        except Exception as e:
-            print(f"[TelegramBot] Erro no polling: {e}")
-            time.sleep(5)
+def delete_webhook(token: str | None = None):
+    """Remove o webhook (útil para debugging local com polling)."""
+    token = token or _TOKEN
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/deleteWebhook",
+            json={"drop_pending_updates": True},
+            timeout=10,
+        )
+        print("[TelegramBot] Webhook removido.")
+    except Exception as e:
+        print(f"[TelegramBot] Erro ao remover webhook: {e}")

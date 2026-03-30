@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, APIRouter
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from web.state import state
@@ -12,10 +12,17 @@ from core import run_monitor_loop
 from labs import CONNECTORS
 from notifiers import NOTIFIERS
 from notifiers.telegram import get_users, remove_user
-from notifiers.telegram_polling import run_bot_polling
+from notifiers.telegram_polling import (
+    handle_update,
+    register_webhook,
+    WEBHOOK_SECRET_PATH,
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+APP_URL = os.environ.get("APP_URL", "https://pinkblue-vet-production.up.railway.app")
+STANDARD_STATUSES = ["Pronto", "Parcial", "Em Andamento", "Analisando", "Recebido", "Arquivo morto", "Cancelado"]
 
 
 @asynccontextmanager
@@ -24,15 +31,13 @@ async def lifespan(app):
     monitor_thread = threading.Thread(target=run_monitor_loop, args=(state,), daemon=True)
     monitor_thread.start()
 
-    # Telegram bot polling
-    token = os.environ.get("TELEGRAM_TOKEN", "8704375512:AAFs8ICnxKAphbFscOK9NKNbpzWwyYTB4tA")
-    bot_thread = threading.Thread(target=run_bot_polling, args=(token,), daemon=True)
-    bot_thread.start()
+    # Register Telegram webhook (replaces polling — no thread needed)
+    register_webhook(APP_URL)
 
     yield
 
 
-app = FastAPI(lifespan=lifespan, title="Lab Monitor")
+app = FastAPI(lifespan=lifespan, title="PinkBlue Vet")
 router = APIRouter(prefix="/labmonitor")
 
 
@@ -40,6 +45,19 @@ router = APIRouter(prefix="/labmonitor")
 
 def _render(request, template, **ctx):
     return templates.TemplateResponse(template, {"request": request, **ctx})
+
+
+# ── Telegram Webhook ─────────────────────────────────────────────────────────
+
+@app.post(f"/telegram/webhook/{WEBHOOK_SECRET_PATH}")
+async def telegram_webhook(request: Request):
+    """Receives Telegram updates via webhook. One update = one response, no polling race."""
+    try:
+        update = await request.json()
+        handle_update(update)
+    except Exception as e:
+        print(f"[Webhook] Erro ao processar update: {e}")
+    return JSONResponse({"ok": True})
 
 
 # ── Landing page ──────────────────────────────────────────────────────────────
@@ -64,8 +82,6 @@ async def dashboard_slash(request: Request):
                    lab_counts=state.get_lab_counts(),
                    notifications=state.notifications)
 
-
-STANDARD_STATUSES = ["Pronto", "Parcial", "Em Andamento", "Analisando", "Recebido", "Arquivo morto", "Cancelado"]
 
 @router.get("/exames", response_class=HTMLResponse)
 async def exames(request: Request, lab: str = "", status: str = ""):

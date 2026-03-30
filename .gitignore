@@ -1,5 +1,4 @@
 .secrets
 estado_exames.json
-telegram_users.json
 __pycache__/
 *.pyc
