@@ -13,7 +13,8 @@ STATUS_MAP: dict[str, str] = {
     "Em Andamento":    "Em Andamento",
     "Recebido":        "Recebido",
     "Analisando":      "Analisando",
-    "Arquivado":   "Arquivado",
+    "Arquivo morto": "Arquivado",
+    "Arquivado":     "Arquivado",
     "Cancelado":       "Cancelado",
     # Variations / lab-specific aliases
     "Entrega":         "Pronto",
