@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from web.state import state
@@ -52,8 +52,14 @@ async def landing(request: Request):
 # ── Lab Monitor Pages ─────────────────────────────────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
-@router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    return _render(request, "dashboard.html",
+                   lab_counts=state.get_lab_counts(),
+                   notifications=state.notifications)
+
+
+@router.get("/", response_class=HTMLResponse)
+async def dashboard_slash(request: Request):
     return _render(request, "dashboard.html",
                    lab_counts=state.get_lab_counts(),
                    notifications=state.notifications)
