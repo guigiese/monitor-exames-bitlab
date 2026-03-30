@@ -2,8 +2,8 @@
 Polling loop para receber comandos do Telegram Bot.
 
 Comandos reconhecidos:
-  /start    — inscreve o usuário para receber notificações
-  /assinar  — alias para /start
+  /start    — boas-vindas e lista de comandos (sem info sensível)
+  /assinar  — inscreve o usuário para receber notificações
   /sair     — remove o usuário da lista
   /status   — informa se o usuário está inscrito
 """
@@ -41,11 +41,20 @@ def _handle_update(token: str, update: dict):
     if text.startswith("/"):
         text = text.split("@")[0]
 
-    if text in ("/start", "/assinar", "/subscribe"):
+    if text == "/start":
+        _send(token, chat_id,
+              "👋 <b>Olá! Bem-vindo(a)!</b>\n\n"
+              "Este bot envia notificações automáticas de resultados.\n\n"
+              "📋 Comandos disponíveis:\n"
+              "• /assinar — receber notificações\n"
+              "• /sair — cancelar inscrição\n"
+              "• /status — verificar sua situação")
+
+    elif text in ("/assinar", "/subscribe"):
         if add_user(chat_id):
             _send(token, chat_id,
                   "✅ <b>Inscrito com sucesso!</b>\n\n"
-                  "Você passará a receber notificações quando novos exames forem detectados ou resultados ficarem prontos. 🔬\n\n"
+                  "Você passará a receber notificações automaticamente.\n\n"
                   "Para cancelar, envie /sair.")
         else:
             _send(token, chat_id,
@@ -56,16 +65,16 @@ def _handle_update(token: str, update: dict):
         if remove_user(chat_id):
             _send(token, chat_id,
                   "👋 Você foi <b>removido</b> da lista de notificações.\n\n"
-                  "Para se inscrever novamente, envie /start.")
+                  "Para se inscrever novamente, envie /assinar.")
         else:
             _send(token, chat_id,
                   "ℹ️ Você não está na lista de notificações.")
 
     elif text == "/status":
         if chat_id in get_users():
-            _send(token, chat_id, "✅ Você está inscrito e receberá notificações.")
+            _send(token, chat_id, "✅ Você está inscrito e receberá notificações.\n\nPara cancelar, envie /sair.")
         else:
-            _send(token, chat_id, "❌ Você não está inscrito. Envie /start para se inscrever.")
+            _send(token, chat_id, "❌ Você não está inscrito.\n\nEnvie /assinar para se inscrever.")
 
 
 def run_bot_polling(token: str | None = None):
