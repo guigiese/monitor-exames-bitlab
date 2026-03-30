@@ -3,14 +3,14 @@
 {% block content %}
 
 <!-- Filtros -->
-<form class="flex flex-wrap gap-3 mb-5" method="get">
-  <select name="lab" class="border rounded-lg px-3 py-2 text-sm bg-white">
+<form class="flex flex-wrap gap-2 mb-5" method="get">
+  <select name="lab" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-0">
     <option value="">Todos os labs</option>
     {% for l in labs_cfg %}
     <option value="{{ l.id }}" {% if lab_filter == l.id %}selected{% endif %}>{{ l.name }}</option>
     {% endfor %}
   </select>
-  <select name="status" class="border rounded-lg px-3 py-2 text-sm bg-white">
+  <select name="status" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-0">
     <option value="">Todos os status</option>
     {% for s in statuses %}
     <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
@@ -24,11 +24,15 @@
   {% endif %}
 </form>
 
-<!-- Tabela -->
-<div class="bg-white rounded-xl border shadow-sm p-5"
-     id="exames-table"
+<!-- Contagem -->
+{% if groups %}
+<p class="text-xs text-gray-400 mb-3">{{ groups | length }} requisição{% if groups | length != 1 %}ões{% endif %}</p>
+{% endif %}
+
+<!-- Lista de grupos (atualiza a cada 15min) -->
+<div id="exames-table"
      hx-get="/labmonitor/partials/exames?lab={{ lab_filter }}&status={{ status_filter }}"
-     hx-trigger="every 5m"
+     hx-trigger="every 15m"
      hx-swap="innerHTML">
   {% include "partials/exames_table.html" %}
 </div>

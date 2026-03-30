@@ -2,10 +2,10 @@
 <div class="space-y-2">
   {% for n in notifications %}
   <div class="flex gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100 text-sm">
-    <span class="text-gray-400 whitespace-nowrap font-mono text-xs pt-0.5">{{ n.time }}</span>
-    <div>
+    <span class="text-gray-400 whitespace-nowrap font-mono text-xs pt-0.5 shrink-0">{{ n.time }}</span>
+    <div class="min-w-0">
       <span class="text-xs font-medium text-indigo-600 mr-2">{{ n.lab }}</span>
-      <span class="text-gray-700">{{ n.msg | striptags | truncate(120) }}</span>
+      <span class="text-gray-700">{{ n.msg | striptags | truncate(140) }}</span>
     </div>
   </div>
   {% endfor %}

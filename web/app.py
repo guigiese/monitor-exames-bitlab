@@ -65,17 +65,14 @@ async def dashboard_slash(request: Request):
                    notifications=state.notifications)
 
 
+STANDARD_STATUSES = ["Pronto", "Parcial", "Em Andamento", "Analisando", "Recebido", "Arquivo morto", "Cancelado"]
+
 @router.get("/exames", response_class=HTMLResponse)
 async def exames(request: Request, lab: str = "", status: str = ""):
-    labs_cfg = state.config["labs"]
-    statuses = sorted({i["status"]
-                       for snap in state.snapshots.values()
-                       for rec in snap.values()
-                       for i in rec["itens"].values()})
     return _render(request, "exames.html",
-                   rows=state.get_exames(lab, status),
-                   labs_cfg=labs_cfg,
-                   statuses=statuses,
+                   groups=state.get_exames(lab, status),
+                   labs_cfg=state.config["labs"],
+                   statuses=STANDARD_STATUSES,
                    lab_filter=lab,
                    status_filter=status)
 
@@ -118,7 +115,7 @@ async def partial_lab_counts(request: Request):
 @router.get("/partials/exames", response_class=HTMLResponse)
 async def partial_exames(request: Request, lab: str = "", status: str = ""):
     return _render(request, "partials/exames_table.html",
-                   rows=state.get_exames(lab, status))
+                   groups=state.get_exames(lab, status))
 
 
 @router.get("/partials/telegram-users", response_class=HTMLResponse)

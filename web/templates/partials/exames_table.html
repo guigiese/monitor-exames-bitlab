@@ -1,61 +1,128 @@
-{% macro badge(status) %}
-  {% if status in ["Pronto", "Entrega"] %}
-    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{ status }}</span>
-  {% elif status in ["Em Andamento", "Recebido", "Analisando"] %}
-    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">{{ status }}</span>
+{% macro badge_geral(status) %}
+  {% if status == "Pronto" %}
+    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+      Pronto
+    </span>
+  {% elif status == "Parcial" %}
+    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/></svg>
+      Parcial
+    </span>
+  {% elif status == "Analisando" %}
+    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+      <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      Analisando
+    </span>
+  {% elif status == "Em Andamento" %}
+    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+      Em Andamento
+    </span>
+  {% elif status == "Recebido" %}
+    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z"/></svg>
+      Recebido
+    </span>
   {% elif status == "Arquivo morto" %}
-    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ status }}</span>
+    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">{{ status }}</span>
   {% else %}
-    <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{ status }}</span>
+    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ status }}</span>
   {% endif %}
 {% endmacro %}
 
-{% if rows %}
+{% macro badge_item(status) %}
+  {% if status == "Pronto" %}
+    <span class="px-2 py-0.5 rounded text-xs bg-green-50 text-green-700 font-medium">{{ status }}</span>
+  {% elif status == "Analisando" %}
+    <span class="px-2 py-0.5 rounded text-xs bg-yellow-50 text-yellow-700 font-medium">{{ status }}</span>
+  {% elif status == "Em Andamento" %}
+    <span class="px-2 py-0.5 rounded text-xs bg-amber-50 text-amber-700 font-medium">{{ status }}</span>
+  {% elif status == "Recebido" %}
+    <span class="px-2 py-0.5 rounded text-xs bg-purple-50 text-purple-700 font-medium">{{ status }}</span>
+  {% elif status == "Arquivo morto" %}
+    <span class="px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-400">{{ status }}</span>
+  {% else %}
+    <span class="px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-600">{{ status }}</span>
+  {% endif %}
+{% endmacro %}
 
-<!-- Mobile: cards -->
+{% if groups %}
+
+<!-- ── Mobile: cards ─────────────────────────────────────────────────────── -->
 <div class="md:hidden space-y-3">
-  {% for row in rows %}
-  <div class="border border-gray-100 rounded-lg p-3 bg-white">
-    <div class="flex items-start justify-between gap-2 mb-1">
-      <p class="font-medium text-gray-800 text-sm leading-snug">{{ row.paciente }}</p>
-      {{ badge(row.status) }}
+  {% for g in groups %}
+  <details class="group bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden
+                  {% if g.status_geral != 'Pronto' %}open{% endif %}">
+    <summary class="flex items-start justify-between gap-3 p-4 cursor-pointer list-none select-none
+                    hover:bg-gray-50 active:bg-gray-100">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          {{ badge_geral(g.status_geral) }}
+          <span class="text-xs text-gray-400">{{ g.itens | length }} exame{{ 's' if g.itens | length != 1 }}</span>
+        </div>
+        <p class="font-semibold text-gray-800 text-sm leading-snug truncate">{{ g.paciente }}</p>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-gray-400">
+          <span class="bg-gray-100 rounded px-1.5 py-0.5 font-medium">{{ g.lab }}</span>
+          <span>Nº {{ g.record_id }}</span>
+          <span>{{ g.data }}</span>
+        </div>
+      </div>
+      <svg class="w-4 h-4 text-gray-400 shrink-0 mt-1 transition-transform group-open:rotate-180"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </summary>
+    <div class="border-t border-gray-100 divide-y divide-gray-50">
+      {% for item in g.itens %}
+      <div class="flex items-center justify-between px-4 py-2.5 text-sm">
+        <span class="text-gray-700 truncate pr-3">{{ item.nome }}</span>
+        {{ badge_item(item.status) }}
+      </div>
+      {% endfor %}
     </div>
-    <p class="text-xs text-gray-500 mb-2">{{ row.exame }}</p>
-    <div class="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-      <span class="bg-gray-100 rounded px-1.5 py-0.5">{{ row.lab }}</span>
-      <span>Nº {{ row.record_id }}</span>
-      <span>{{ row.data }}</span>
-    </div>
-  </div>
+  </details>
   {% endfor %}
 </div>
 
-<!-- Desktop: tabela -->
-<div class="hidden md:block overflow-x-auto">
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-        <th class="pb-3 pr-4">Lab</th>
-        <th class="pb-3 pr-4">Nº</th>
-        <th class="pb-3 pr-4">Paciente</th>
-        <th class="pb-3 pr-4">Exame</th>
-        <th class="pb-3 pr-4">Data</th>
-        <th class="pb-3">Status</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-gray-100">
-      {% for row in rows %}
-      <tr class="hover:bg-gray-50">
-        <td class="py-3 pr-4 text-xs text-gray-500">{{ row.lab }}</td>
-        <td class="py-3 pr-4 font-mono text-xs text-gray-600">{{ row.record_id }}</td>
-        <td class="py-3 pr-4 font-medium text-gray-800 max-w-xs truncate">{{ row.paciente }}</td>
-        <td class="py-3 pr-4 text-gray-600 max-w-xs truncate">{{ row.exame }}</td>
-        <td class="py-3 pr-4 text-xs text-gray-500">{{ row.data }}</td>
-        <td class="py-3">{{ badge(row.status) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- ── Desktop: tabela agrupada ──────────────────────────────────────────── -->
+<div class="hidden md:block">
+  <div class="space-y-2">
+    {% for g in groups %}
+    <details class="group bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden
+                    {% if g.status_geral != 'Pronto' %}open{% endif %}">
+      <summary class="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 px-5 py-3.5
+                      cursor-pointer list-none select-none hover:bg-gray-50 active:bg-gray-100">
+        <div class="min-w-0">
+          <p class="font-semibold text-gray-800 text-sm truncate">{{ g.paciente }}</p>
+          <p class="text-xs text-gray-400 truncate mt-0.5">{{ g.lab }}</p>
+        </div>
+        <span class="font-mono text-xs text-gray-500 whitespace-nowrap">Nº {{ g.record_id }}</span>
+        <span class="text-xs text-gray-500 whitespace-nowrap">{{ g.data }}</span>
+        <div class="flex items-center gap-1.5">
+          {{ badge_geral(g.status_geral) }}
+          <span class="text-xs text-gray-400">{{ g.itens | length }}x</span>
+        </div>
+        <svg class="w-4 h-4 text-gray-400 shrink-0 transition-transform group-open:rotate-180"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </summary>
+      <div class="border-t border-gray-100">
+        <table class="w-full text-sm">
+          <tbody class="divide-y divide-gray-50">
+            {% for item in g.itens %}
+            <tr class="hover:bg-gray-50">
+              <td class="pl-8 pr-4 py-2.5 text-gray-700">{{ item.nome }}</td>
+              <td class="pr-5 py-2.5 text-right">{{ badge_item(item.status) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
 </div>
 
 {% else %}

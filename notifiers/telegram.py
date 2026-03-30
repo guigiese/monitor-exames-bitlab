@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -9,45 +10,74 @@ from .base import Notifier
 USERS_FILE = Path(__file__).parent.parent / "telegram_users.json"
 
 
-def _default_chat_id() -> str:
-    return os.environ.get("TELEGRAM_CHATID", "8658992577")
+def _default_user() -> dict:
+    cid = os.environ.get("TELEGRAM_CHATID", "8658992577")
+    return {"chat_id": cid, "name": "", "username": "", "subscribed_at": ""}
 
 
-def get_users() -> list[str]:
-    """Retorna lista de chat_ids cadastrados. Cria o arquivo se não existir."""
+def _load_raw() -> list[dict]:
+    """Load users, handling both old format (list of strings) and new (list of dicts)."""
     if not USERS_FILE.exists():
-        default = _default_chat_id()
-        _write_users([default] if default else [])
+        default = _default_user()
+        _write_users([default])
+        return [default]
     try:
-        users = json.loads(USERS_FILE.read_text(encoding="utf-8"))
-        return [str(u) for u in users if u]
+        data = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+        result = []
+        for u in data:
+            if isinstance(u, str):
+                result.append({"chat_id": u, "name": "", "username": "", "subscribed_at": ""})
+            elif isinstance(u, dict) and u.get("chat_id"):
+                result.append(u)
+        return result
     except Exception:
-        return [_default_chat_id()]
+        return [_default_user()]
 
 
-def add_user(chat_id: str) -> bool:
-    """Adiciona chat_id à lista. Retorna True se adicionado, False se já existia."""
+def get_users() -> list[dict]:
+    """Returns list of user dicts: chat_id, name, username, subscribed_at."""
+    return _load_raw()
+
+
+def get_user_ids() -> list[str]:
+    """Returns list of chat_ids only, for sending notifications."""
+    return [u["chat_id"] for u in _load_raw()]
+
+
+def add_user(chat_id: str, name: str = "", username: str = "") -> bool:
+    """Add user. Returns True if newly added, False if already existed (updates name)."""
     chat_id = str(chat_id)
-    users = get_users()
-    if chat_id in users:
-        return False
-    users.append(chat_id)
+    users = _load_raw()
+    for u in users:
+        if u["chat_id"] == chat_id:
+            if name:
+                u["name"] = name
+            if username:
+                u["username"] = username
+            _write_users(users)
+            return False
+    users.append({
+        "chat_id": chat_id,
+        "name": name,
+        "username": username,
+        "subscribed_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+    })
     _write_users(users)
     return True
 
 
 def remove_user(chat_id: str) -> bool:
-    """Remove chat_id da lista. Retorna True se removido."""
+    """Remove user by chat_id. Returns True if removed."""
     chat_id = str(chat_id)
-    users = get_users()
-    if chat_id not in users:
+    users = _load_raw()
+    new_users = [u for u in users if u["chat_id"] != chat_id]
+    if len(new_users) == len(users):
         return False
-    users.remove(chat_id)
-    _write_users(users)
+    _write_users(new_users)
     return True
 
 
-def _write_users(users: list[str]):
+def _write_users(users: list[dict]):
     USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -57,7 +87,7 @@ class TelegramNotifier(Notifier):
         self._token = os.environ.get("TELEGRAM_TOKEN", "8704375512:AAFs8ICnxKAphbFscOK9NKNbpzWwyYTB4tA")
 
     def enviar(self, mensagem: str) -> None:
-        for chat_id in get_users():
+        for chat_id in get_user_ids():
             try:
                 requests.post(
                     f"https://api.telegram.org/bot{self._token}/sendMessage",

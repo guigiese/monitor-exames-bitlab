@@ -1,14 +1,32 @@
 <div id="telegram-users-list">
   {% if telegram_users %}
   <ul class="divide-y divide-gray-100">
-    {% for uid in telegram_users %}
-    <li class="flex items-center justify-between py-2 text-sm">
-      <span class="font-mono text-gray-700">{{ uid }}</span>
-      <button hx-post="/labmonitor/canais/telegram/users/{{ uid }}/remove"
+    {% for u in telegram_users %}
+    <li class="flex items-center justify-between py-2.5 gap-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          {% if u.name %}
+          <span class="font-medium text-gray-800 text-sm">{{ u.name }}</span>
+          {% endif %}
+          {% if u.username %}
+          <span class="text-xs text-indigo-500">@{{ u.username }}</span>
+          {% endif %}
+          {% if not u.name and not u.username %}
+          <span class="text-sm text-gray-500 italic">Sem nome</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span class="font-mono text-xs text-gray-400">ID: {{ u.chat_id }}</span>
+          {% if u.subscribed_at %}
+          <span class="text-xs text-gray-400">· inscrito {{ u.subscribed_at }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <button hx-post="/labmonitor/canais/telegram/users/{{ u.chat_id }}/remove"
               hx-target="#telegram-users-list"
               hx-swap="outerHTML"
-              hx-confirm="Remover este usuário da lista de notificações?"
-              class="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">
+              hx-confirm="Remover {{ u.name or u.chat_id }} da lista de notificações?"
+              class="shrink-0 text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">
         Remover
       </button>
     </li>
