@@ -24,7 +24,7 @@
       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z"/></svg>
       Recebido
     </span>
-  {% elif status == "Arquivo morto" %}
+  {% elif status == "Arquivado" %}
     <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">{{ status }}</span>
   {% else %}
     <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ status }}</span>
@@ -40,7 +40,7 @@
     <span class="px-2 py-0.5 rounded text-xs bg-amber-50 text-amber-700 font-medium">{{ status }}</span>
   {% elif status == "Recebido" %}
     <span class="px-2 py-0.5 rounded text-xs bg-purple-50 text-purple-700 font-medium">{{ status }}</span>
-  {% elif status == "Arquivo morto" %}
+  {% elif status == "Arquivado" %}
     <span class="px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-400">{{ status }}</span>
   {% else %}
     <span class="px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-600">{{ status }}</span>
@@ -113,7 +113,7 @@
           <tbody class="divide-y divide-gray-50">
             {% for item in g.itens %}
             <tr class="hover:bg-gray-50">
-              <td class="pl-8 pr-4 py-2.5 text-gray-700">{{ item.nome }}</td>
+              <td class="pl-5 pr-4 py-2.5 text-gray-700">{{ item.nome }}</td>
               <td class="pr-5 py-2.5 text-right">{{ badge_item(item.status) }}</td>
             </tr>
             {% endfor %}

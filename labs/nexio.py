@@ -79,9 +79,16 @@ class NexioConnector(LabConnector):
             if not num:
                 continue
             label = f"{exame['paciente']} - {exame['proprietario']}".strip(" -")
+            # Normaliza data para YYYY-MM-DD (Pathoweb retorna DD/MM/YYYY)
+            raw_date = exame["data_prometida"]
+            try:
+                from datetime import datetime
+                data_iso = datetime.strptime(raw_date, "%d/%m/%Y").strftime("%Y-%m-%d")
+            except Exception:
+                data_iso = raw_date
             resultado[num] = {
                 "label": label,
-                "data":  exame["data_prometida"],
+                "data":  data_iso,
                 "itens": {
                     num: {"nome": f"Exame {num}", "status": exame["status"]}
                 },

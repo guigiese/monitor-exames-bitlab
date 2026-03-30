@@ -13,7 +13,7 @@ STATUS_MAP: dict[str, str] = {
     "Em Andamento":    "Em Andamento",
     "Recebido":        "Recebido",
     "Analisando":      "Analisando",
-    "Arquivo morto":   "Arquivo morto",
+    "Arquivado":   "Arquivado",
     "Cancelado":       "Cancelado",
     # Variations / lab-specific aliases
     "Entrega":         "Pronto",
@@ -44,7 +44,7 @@ _STATUS_PRONTO: set[str] = {"Pronto"}
 
 # Ordered priority for overall group status (when no items are done)
 _STATUS_PRIORITY: list[str] = [
-    "Analisando", "Em Andamento", "Recebido", "Arquivo morto", "Cancelado"
+    "Analisando", "Em Andamento", "Recebido", "Arquivado", "Cancelado"
 ]
 
 
