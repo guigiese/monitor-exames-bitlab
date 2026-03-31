@@ -28,8 +28,6 @@ STATUS_MAP: dict[str, str] = {
     "em andamento":       "Em Andamento",
     "recebido":           "Recebido",
     "analisando":         "Analisando",
-    "arquivo morto":      "Arquivado",
-    "arquivado":          "Arquivado",
     "cancelado":          "Cancelado",
     # Aliases
     "entrega":            "Pronto",
@@ -40,6 +38,8 @@ STATUS_MAP: dict[str, str] = {
     "disponivel":         "Pronto",
     "concluído":          "Pronto",
     "concluido":          "Pronto",
+    "arquivo morto":      "Pronto",
+    "arquivado":          "Pronto",
     "em análise":         "Analisando",
     "em analise":         "Analisando",
     "análise":            "Analisando",
@@ -93,14 +93,14 @@ EXCLUDE_EXAMES: set[str] = {
 }
 
 # Statuses considered "done" — no dias_em_aberto tracking
-_STATUS_DONE: set[str] = {"Pronto", "Arquivado", "Cancelado"}
+_STATUS_DONE: set[str] = {"Pronto", "Cancelado"}
 
 # Statuses considered "fully ready" for group completion
 _STATUS_PRONTO: set[str] = {"Pronto"}
 
 # Ordered priority for overall group status (when no items are Pronto)
 _STATUS_PRIORITY: list[str] = [
-    "Analisando", "Em Andamento", "Recebido", "Arquivado", "Cancelado"
+    "Analisando", "Em Andamento", "Recebido", "Cancelado"
 ]
 
 
@@ -243,7 +243,10 @@ class AppState:
                 )
 
                 # Strip liberado_em from itens before storing (it's on the group already)
-                itens_clean = [{"nome": i["nome"], "status": i["status"]} for i in itens]
+                itens_clean = [
+                    {"nome": i["nome"], "status": i["status"], "item_id": i.get("item_id")}
+                    for i in itens
+                ]
 
                 groups.append({
                     "lab_id":         lab_id,
@@ -272,7 +275,7 @@ class AppState:
             lid  = lab_cfg["id"]
             snap = self.snapshots.get(lid, {})
 
-            pronto = parcial = andamento = arquivado = total = 0
+            pronto = parcial = andamento = total = 0
 
             for record in snap.values():
                 itens = [
@@ -288,8 +291,6 @@ class AppState:
                     pronto += 1
                 elif n_p > 0:
                     parcial += 1
-                elif any(s in {"Arquivado", "Cancelado"} for s in itens):
-                    arquivado += 1
                 else:
                     andamento += 1
 
@@ -299,7 +300,6 @@ class AppState:
                 "pronto":    pronto,
                 "parcial":   parcial,
                 "andamento": andamento,
-                "arquivado": arquivado,
                 "total":     total,
                 "last_check": self.last_check.get(lid, "—"),
                 "error":      self.last_error.get(lid, ""),

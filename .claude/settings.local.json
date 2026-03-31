@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "WebFetch",
+      "WebSearch",
+      "Glob",
+      "Grep",
+      "Agent",
+      "TodoWrite",
+      "ToolSearch",
+      "Skill"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\guigi\\AppData\\Local\\Temp"
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "interval_minutes": 5,
+  "interval_minutes": 15,
   "labs": [
     {
       "id": "bitlab",
