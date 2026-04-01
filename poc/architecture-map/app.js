@@ -624,7 +624,6 @@ function renderHeroMeta() {
 
 function renderOverview() {
   const visibleNodes = state.cy.nodes().not(".is-hidden");
-  const visibleEdges = state.cy.edges().not(".is-hidden");
   const liveNodes = visibleNodes.filter((node) =>
     ["live-http", "live-api", "local"].includes(node.data("sourceKind"))
   ).length;
@@ -642,27 +641,22 @@ function renderOverview() {
     {
       label: "Artefatos visíveis",
       value: `${visibleNodes.length}/${state.map.nodes.length}`,
-      note: "Nós visíveis considerando busca e filtros ativos.",
-    },
-    {
-      label: "Conexões visíveis",
-      value: String(visibleEdges.length),
-      note: "Relações entre artefatos que seguem no recorte atual.",
+      note: "Nós visíveis com os filtros atuais.",
     },
     {
       label: "Cobertura ao vivo",
       value: `${liveNodes}/${visibleNodes.length || 1}`,
-      note: "Parte do recorte atual já puxada por sonda pública ou API.",
+      note: "Parte do recorte atual puxada por sonda ou API.",
     },
     {
       label: "Protocolos monitorados",
       value: String(protocolMetric),
-      note: `Telegram com ${telegramUsers} inscrito(s) no snapshot mais recente.`,
+      note: `Telegram com ${telegramUsers} inscrito(s) neste snapshot.`,
     },
     {
       label: "Itens em atenção",
       value: String(attentionNodes),
-      note: "Inclui alertas, problemas e caminhos dormentes do mapa.",
+      note: "Alertas, problemas e caminhos dormentes.",
     },
   ];
 
@@ -680,11 +674,14 @@ function renderOverview() {
 }
 
 function renderWatchlist() {
+  const severityRank = { problem: 0, warning: 1, dormant: 2 };
   const candidates = state.cy
     .nodes()
     .not(".is-hidden")
     .map((node) => node.data())
-    .filter((node) => ["warning", "problem", "dormant"].includes(node.health));
+    .filter((node) => ["warning", "problem", "dormant"].includes(node.health))
+    .sort((a, b) => (severityRank[a.health] ?? 9) - (severityRank[b.health] ?? 9))
+    .slice(0, 3);
 
   if (!candidates.length) {
     watchlist.innerHTML = `
@@ -740,17 +737,13 @@ function selectNode(nodeId) {
 
 function renderDefaultDetail() {
   const meta = state.map.meta || {};
-  const highlightedNodes = state.map.nodes.filter((node) =>
-    ["warning", "problem", "dormant"].includes(node.health)
-  );
 
   detailPanel.innerHTML = `
     <div class="detail-header">
       <p class="section-kicker">Seleção</p>
       <h3>Visão geral do mapa</h3>
       <p class="detail-note">
-        Este painel combina snapshot manual com sinais vivos de HTTP público e API do Railway.
-        Selecione um nó ou conexão para ver motivo do status, limites, métricas e links úteis.
+        Selecione um nó ou conexão para ver status, fonte do sinal, métricas e links úteis.
       </p>
     </div>
     <div class="detail-stack">
@@ -763,26 +756,7 @@ function renderDefaultDetail() {
           ${detailCell("Modo", state.map.mode || "local-manual")}
         </div>
       </section>
-      <section class="detail-section">
-        <span class="detail-label">Como ler</span>
-        <ul class="default-list">
-          <li>Ícones identificam os artefatos principais em vez de formas genéricas.</li>
-          <li>O microícone no canto esquerdo reforça a categoria do artefato.</li>
-          <li>O ponto de status no canto direito e os chips mostram saúde atual.</li>
-          <li>No detalhe você vê de onde veio o sinal: manual, HTTP público, API ou sessão local.</li>
-        </ul>
-      </section>
-      <section class="detail-section">
-        <span class="detail-label">Watchlist atual</span>
-        <ul class="default-list">
-          ${highlightedNodes
-            .map(
-              (node) =>
-                `<li><strong>${escapeHtml(node.name)}</strong>: ${escapeHtml(node.healthReason || node.statusLine)}</li>`
-            )
-            .join("")}
-        </ul>
-      </section>
+      <div class="empty-panel">O watchlist já aparece acima do mapa. Aqui o foco passa a ser o item selecionado.</div>
     </div>
   `;
 }

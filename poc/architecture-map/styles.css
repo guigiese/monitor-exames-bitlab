@@ -565,8 +565,11 @@ body {
 
 @media (max-width: 720px) {
   .app-shell {
+    display: flex;
+    flex-direction: column;
     width: min(100vw - 18px, 100%);
     margin: 10px auto 20px;
+    gap: 12px;
   }
 
   .hero,
@@ -577,24 +580,156 @@ body {
     padding: 16px;
   }
 
-  .overview {
-    grid-template-columns: 1fr;
+  .hero {
+    gap: 12px;
   }
 
-  .watchlist,
+  .hero h1 {
+    font-size: 1.55rem;
+  }
+
+  .hero-copy {
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  .hero-notes {
+    display: none;
+  }
+
+  .hero-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .meta-card {
+    padding: 10px 11px;
+    border-radius: 16px;
+  }
+
+  .meta-card strong {
+    margin-top: 6px;
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+
+  .meta-card p {
+    display: none;
+  }
+
+  .toolbar {
+    gap: 12px;
+  }
+
+  .search-field input {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+
+  .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 0.86rem;
+  }
+
+  .workspace {
+    order: 3;
+  }
+
+  .overview {
+    order: 4;
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .overview::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stat-card {
+    min-width: 154px;
+    padding: 14px 16px;
+  }
+
+  .stat-card strong {
+    font-size: 1.45rem;
+  }
+
+  .stat-card p {
+    display: none;
+  }
+
+  .watchlist {
+    order: 5;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
   .metric-grid {
     grid-template-columns: 1fr;
   }
 
   .canvas-header {
     flex-direction: column;
+    gap: 10px;
+  }
+
+  .canvas-header p {
+    display: none;
+  }
+
+  .canvas-actions {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .graph-surface {
-    height: 62vh;
+    height: min(50vh, 420px);
   }
 
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .detail-card {
+    min-height: auto;
+  }
+
+  .legend {
+    gap: 10px;
+  }
+
+  .legend-group {
+    gap: 6px;
+  }
+
+  .legend-chip,
+  .status-pill,
+  .source-pill,
+  .link-pill,
+  .tag {
+    font-size: 0.76rem;
+  }
+
+  .watch-card {
+    padding: 14px;
+  }
+
+  .watch-card p {
+    font-size: 0.88rem;
   }
 }
