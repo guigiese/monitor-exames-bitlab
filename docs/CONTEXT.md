@@ -82,6 +82,10 @@ Isso é intencional: o custo zero de infra exige zero serviços adicionais.
 │           ├── resultado_bitlab.html  # Tabela inline de resultados BitLab (valor + referência + alerta)
 │           └── telegram_users.html   # Lista de usuários inscritos no bot
 │
+├── .github/
+│   └── workflows/
+│       └── session-route.yml  # Session Router: conta branches session/*, roteia PRs para fast-path ou full-path
+│
 ├── docs/
 │   ├── CONTEXT.md           # Este arquivo
 │   └── DEVLOG.md            # Log narrativo de decisões e lições aprendidas

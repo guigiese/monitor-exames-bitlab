@@ -479,6 +479,74 @@ Para trabalho paralelo entre IAs com artefatos compartilhados:
 
 ---
 
+## Fase 13 — Protocolo de sessões paralelas e automação de CI/CD
+
+### O problema
+
+Com múltiplas sessões de IA podendo trabalhar no repositório ao mesmo tempo, o modelo anterior
+(seção 11 do WORKING_MODEL.md "Claude + Codex") era inadequado por dois motivos:
+
+1. Baseado em nomes de ferramentas específicas (Claude Code vs Codex) — frágil e não generalizável
+2. Dependia de coordenação manual implícita, sem mecanismo de enforcement
+
+O risco concreto: duas sessões editando o mesmo arquivo em paralelo, ambas fazendo push para
+`main`, causando conflitos silenciosos ou sobrescritas.
+
+### Por que isolamento por session-id, não por nome de IA
+
+O nome da ferramenta de IA não é uma identidade confiável de sessão:
+- Uma mesma ferramenta pode ter múltiplas instâncias ativas
+- O nome pode mudar com versões ou contextos
+- Um desenvolvedor humano também é uma "sessão" — precisa do mesmo protocolo
+
+A identidade correta é a **sessão**: `YYYYMMDD + 4 hex chars aleatórios` via `secrets.token_hex(2)`.
+Isso garante unicidade mesmo com múltiplas instâncias da mesma ferramenta.
+
+### Fast-path vs Full-path via GitHub Actions
+
+O tradeoff central: como garantir coordenação sem criar burocracia que atrasa o trabalho único?
+
+**Decisão:** o GitHub Actions (`session-route.yml`) é o árbitro neutro.
+
+```
+PR aberto → route job conta branches session/* ativos →
+  1 sessão  → fast-path: syntax check → merge imediato → deploy
+  2+ sessões → full-path: syntax check + import check → merge → deploy
+```
+
+Quando há apenas uma sessão ativa, o overhead extra é apenas um job de syntax check —
+prático e rápido. Quando há múltiplas sessões, a validação mais robusta protege o merge.
+
+### O tradeoff: always-open-PR vs direct-push
+
+**Alternativa descartada:** push direto para `main` com regra de "não tocar ao mesmo tempo".
+- Problema: não há enforcement. Depende de boa vontade.
+- Risco: dois pushes simultâneos com `git push --force` ou rebase acidental.
+
+**Decisão adotada:** branch protection em `main` + sempre abrir PR de `session/` branch.
+- Vantagem: o Actions é o único que pode fazer merge — enforcement automático.
+- Custo: cada sessão precisa criar um branch. Aceitável porque é um comando simples.
+- Custo adicional: o fast-path ainda requer um PR e um job de syntax check — mas isso é um
+  mecanismo de segurança mínimo razoável.
+
+### O Actions como árbitro neutro
+
+Uma sessão não precisa saber se outras estão ativas — o workflow conta os branches em tempo real.
+Se uma sessão começa enquanto outra está ativa, o próximo PR automaticamente ativa o full-path.
+Quando a segunda sessão termina e o branch é deletado, o PR seguinte volta ao fast-path.
+
+**Lição:** automação que observa estado do repositório é mais confiável do que coordenação
+baseada em comentários manuais ou nomes de ferramentas.
+
+### Artefatos criados nesta fase
+
+- `.github/workflows/session-route.yml` — workflow de roteamento
+- `AI_START_HERE.md` seção 5A — reescrita como protocolo operacional obrigatório
+- `docs/WORKING_MODEL.md` seção 11 — reescrita como Multi-Session Protocol
+- Cards Jira: PBCORE-44 (Epic), PBCORE-45 a PBCORE-50 (Tarefas)
+
+---
+
 ## Erros que não devem se repetir
 
 | Erro | Causa | Como evitar |
