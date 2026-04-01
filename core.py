@@ -85,6 +85,17 @@ def _stamp_liberados(anterior: dict, atual: dict, ts: str) -> None:
                     item["liberado_em"] = ts
 
 
+def _hydrate_snapshot_details(lab, anterior: dict, atual: dict, ts: str) -> None:
+    """
+    Enriches the current snapshot with derived metadata that the UI depends on.
+    This must happen on every cycle, including the first one after a restart,
+    otherwise alert/resultado data disappear until a later refresh.
+    """
+    _stamp_liberados(anterior, atual, ts)
+    if hasattr(lab, "enrich_resultados"):
+        lab.enrich_resultados(anterior, atual)
+
+
 def build_notification_plan(lab_id: str, lab_name: str, anterior: dict, atual: dict) -> tuple[list[str], list[dict]]:
     """
     Returns two streams:
@@ -193,6 +204,7 @@ def run_monitor_loop(state=None):
                 anterior = state.snapshots.get(lab.lab_id, {}) if state else {}
 
                 if not anterior:
+                    _hydrate_snapshot_details(lab, anterior, atual, datetime.now().isoformat())
                     print("  Primeira execucao - estado salvo.")
                 else:
                     internal_messages, external_events = build_notification_plan(
@@ -201,9 +213,7 @@ def run_monitor_loop(state=None):
                         anterior,
                         atual,
                     )
-                    _stamp_liberados(anterior, atual, datetime.now().isoformat())
-                    if hasattr(lab, "enrich_resultados"):
-                        lab.enrich_resultados(anterior, atual)
+                    _hydrate_snapshot_details(lab, anterior, atual, datetime.now().isoformat())
 
                     for msg in internal_messages:
                         print(f"  -> {msg[:80]}")

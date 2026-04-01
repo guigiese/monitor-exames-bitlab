@@ -310,6 +310,7 @@ async def partial_resultado(request: Request, item_id: str):
             token = connector._login()
             raw   = connector.buscar_resultado_html(token, item_id)
             rows  = connector.parse_resultado(raw)
+            _cache_resultado(item_id, rows)
         except Exception as e:
             return HTMLResponse(
                 f'<p class="text-red-500 text-xs p-3">Erro ao carregar resultado: {e}</p>'
@@ -326,6 +327,20 @@ def _find_cached_resultado(item_id: str) -> list[dict] | None:
                 if item.get("item_id") == item_id and "resultado" in item:
                     return item["resultado"]
     return None
+
+
+def _cache_resultado(item_id: str, rows: list[dict]) -> None:
+    """Persists freshly fetched result rows back into the in-memory snapshot."""
+    alert_rank = {None: 0, "yellow": 1, "red": 2}
+    worst = max((row.get("alerta") for row in rows), key=lambda level: alert_rank.get(level, 0), default=None)
+
+    for snap in state.snapshots.values():
+        for record in snap.values():
+            for item in record["itens"].values():
+                if item.get("item_id") == item_id:
+                    item["resultado"] = rows
+                    item["alerta"] = worst
+                    return
 
 
 @router.get("/partials/ultimos_liberados", response_class=HTMLResponse)
