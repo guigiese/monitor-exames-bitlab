@@ -19,17 +19,19 @@ That name may appear in legacy paths or local folder names, but it is not the pl
 
 ## 2. Mandatory Reading Order
 
-Always read in this order before starting implementation:
+**Fast start (sessões de trabalho):** leia `SESSION_PRIMER.md`. Ele é suficiente
+para iniciar qualquer tarefa. Os demais arquivos são referência sob demanda.
 
-1. `AI_START_HERE.md`
+**Leitura completa (onboarding ou dúvida de protocolo):**
+
+1. `AI_START_HERE.md` ← este arquivo
 2. `docs/WORKING_MODEL.md`
 3. `docs/CONTEXT.md`
 4. `docs/DEVLOG.md`
-5. Check the GitHub Projects board for active sessions: look for open PRs to main from `session/*` branches to know if another session is already active
-6. the Jira card related to the task
-7. only then, the relevant code files
+5. o card Jira relacionado à tarefa
+6. somente então, os arquivos de código relevantes
 
-If there is no Jira card yet, the AI should say so clearly and avoid inventing hidden scope.
+Se não há card Jira ainda, diga isso claramente e não invente escopo oculto.
 
 ## 3. Source Of Truth
 
