@@ -673,3 +673,46 @@ This keeps the old local PoC usable while making the feature available in Railwa
 ### Guardrail
 Do not tie the cloud map to a pre-generated runtime file only.
 For the hosted version, the runtime data must remain refreshable by the app itself, otherwise the visual drifts out of date quickly.
+
+---
+
+## Fase 17 - Core/platform discovery and incubator framing
+
+### Context
+After stabilizing the first delivery waves, the next need was not another feature spike.
+It was clarity:
+
+- what the platform must do next to stop relying on memory/files as its operational base;
+- how to treat secrets, repo hygiene and observability without prematurely overengineering;
+- how to describe the next incubated products without confusing them with the current Lab Monitor scope.
+
+### What was consolidated
+Two discovery notes were added under `docs/discovery/`:
+
+- `2026-04-01-core-platform-foundations.md`
+- `2026-04-01-pbinc-crm-financeiro.md`
+
+These notes do not implement the next phase.
+They define the shape of the next phase.
+
+### Core/platform direction
+The recommended next foundation is:
+
+- `PostgreSQL on Railway` as the first official platform database;
+- `SQLAlchemy 2.0 + Alembic + Pydantic Settings` as the persistence/config stack;
+- session-based auth with minimal roles for the current server-rendered app;
+- operational observability built around health endpoints, sync runs, notification events and `/ops-map/`.
+
+Also clarified:
+
+- Railway variables are the pragmatic next secret layer;
+- Vault is a later maturity step, not the first mandatory move;
+- `telegram_users.json`, runtime-mutated `config.json`, hardcoded fallbacks and tokenized git remotes are active debt, not acceptable steady state.
+
+### Incubator direction
+Two large future projects were framed without implementation:
+
+- a veterinary CRM focused on relationship/segmentation/reactivation rather than replacing the core clinic system;
+- a financial reconciler focused on matching SimplesVet expectations against real bank/PSP/adquirente settlements.
+
+Both are intentionally defined as complementary to SimplesVet, not replacements for what it already does.

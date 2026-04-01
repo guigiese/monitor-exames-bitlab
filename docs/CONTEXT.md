@@ -1,7 +1,7 @@
 # CONTEXT.md - PinkBlue Vet / Lab Monitor Module
 > Documento técnico para onboarding de IAs e desenvolvedores.
 > Descreve o estado atual do projeto, arquitetura, contratos de dados e regras de extensão.
-> Atualizado em: 2026-03-31
+> Atualizado em: 2026-04-01
 
 ---
 
@@ -43,8 +43,8 @@ de sistemas, plataformas, integrações e sinais da operação PinkBlue.
 | Deploy | Railway (Railpack, sem Docker customizado) |
 | Repositório | GitHub: guigiese/monitor-exames-bitlab |
 
-Não há banco de dados. O estado vive em memória (`AppState`) e é resetado a cada restart do serviço.
-Isso é intencional: o custo zero de infra exige zero serviços adicionais.
+Hoje não há banco de dados. O estado vive em memória (`AppState`) e é resetado a cada restart do serviço.
+Esse desenho viabilizou a primeira fase do módulo, mas já é tratado como limitação estrutural e frente ativa de evolução.
 
 ---
 
@@ -99,7 +99,8 @@ Isso é intencional: o custo zero de infra exige zero serviços adicionais.
 │
 ├── docs/
 │   ├── CONTEXT.md           # Este arquivo
-│   └── DEVLOG.md            # Log narrativo de decisões e lições aprendidas
+│   ├── DEVLOG.md            # Log narrativo de decisões e lições aprendidas
+│   └── discovery/           # Notas de descoberta e propostas ainda não implementadas
 │
 └── poc/
     ├── architecture-map/    # PoC/base do mapa operacional PinkBlue
@@ -252,9 +253,9 @@ Usuários se inscrevem pelo próprio Telegram — sem necessidade de configurar 
 | `/sair` | Cancela a inscrição |
 | `/status` | Informa se está inscrito ou não |
 
-Os chat IDs inscritos são salvos em `telegram_users.json` (gitignored).
-**Limitação:** o arquivo não sobrevive ao redeploy (sem volume persistente no Railway).
-Após cada deploy, os usuários precisam enviar `/assinar` novamente.
+Os chat IDs inscritos são salvos em `telegram_users.json`.
+Hoje esse arquivo ainda precisa ser tratado como artefato operacional transitório, e a migração para persistência real continua aberta.
+**Limitação:** sem persistência dedicada, o cadastro pode se perder em cenários de redeploy / troca de imagem.
 
 A UI em `/labmonitor/canais` exibe a lista de usuários inscritos com botão de remoção.
 A lista atualiza automaticamente a cada 10 segundos via HTMX polling.
@@ -263,7 +264,8 @@ A lista atualiza automaticamente a cada 10 segundos via HTMX polling.
 
 ## Variáveis de ambiente (Railway)
 
-Todas as credenciais vivem como env vars no Railway — nunca no repositório.
+Estado alvo: credenciais em produção devem viver como env vars do Railway, ou em cofre dedicado quando a plataforma evoluir.
+Estado atual: ainda existem fallbacks sensíveis no código e um arquivo `.secrets` local para desenvolvimento; isso é dívida ativa de segurança, não padrão desejado.
 
 | Variável | Onde usado | Descrição |
 |---|---|---|
@@ -279,7 +281,7 @@ Todas as credenciais vivem como env vars no Railway — nunca no repositório.
 | `WHATSAPP_PHONE` | notifiers/whatsapp.py | Número Callmebot |
 | `CALLMEBOT_APIKEY` | notifiers/whatsapp.py | API key Callmebot |
 
-Para desenvolvimento local, as credenciais ficam em `.secrets` (formato INI, gitignored).
+Para desenvolvimento local, as credenciais atualmente ficam em `.secrets` (formato INI, gitignored).
 
 ---
 
@@ -378,9 +380,19 @@ O Nexio não tem URL pública estável por exame. O link abre o visualizador do 
 
 - **Estado em memória:** restart apaga histórico de notificações e snapshots anteriores.
   Na prática isso significa que o primeiro ciclo pós-restart nunca notifica (comportamento intencional).
-- **telegram_users.json perdido no redeploy:** sem volume persistente, usuários precisam re-assinar após cada deploy.
+- **telegram_users.json ainda fora de persistência real:** o cadastro de inscritos ainda não foi migrado para banco e pode divergir do comportamento desejado em cenários de deploy/rebuild.
 - **Sem autenticação na web:** qualquer um com a URL pode ver e controlar o monitor.
 - **Callmebot limitado:** 16 mensagens por 240 minutos. Desabilitado por padrão.
 - **Nexio:** o parsing é frágil (depende de posição de colunas HTML). Uma mudança de layout no Pathoweb quebra o conector.
 - **Config no container:** `config.json` é versionado e fica dentro da imagem. Mudanças via UI são salvas no disco do container — sobrevivem enquanto o container está vivo, mas são perdidas no redeploy.
 - **BitLab timeout:** o servidor `bitlabenterprise.com.br` pode apresentar timeouts intermitentes (connect timeout=15s). Erro capturado em `last_error` e exibido na UI de labs.
+- **Segredos e remotos ainda precisam saneamento:** há artefatos e fallbacks sensíveis que devem sair do repositório/ambiente local antes da plataforma crescer.
+
+---
+
+## Descobertas em aberto
+
+As propostas ainda não implementadas de plataforma e expansão ficam em `docs/discovery/`.
+
+- `docs/discovery/2026-04-01-core-platform-foundations.md`
+- `docs/discovery/2026-04-01-pbinc-crm-financeiro.md`
