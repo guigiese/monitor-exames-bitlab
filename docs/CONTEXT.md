@@ -24,10 +24,14 @@ Roda 24/7 na nuvem (Railway) como um único serviço Python que combina:
 **URL de produção:** https://pinkblue-vet-production.up.railway.app
 
 A aplicação é servida sob o prefixo `/labmonitor`. A raiz `/` exibe uma landing page
-com os apps disponíveis sob o guarda-chuva PinkBlue Vet. Atualmente apenas o Lab Monitor está ativo neste ambiente.
+com os apps disponíveis sob o guarda-chuva PinkBlue Vet.
 
 Existe também um módulo operacional acessível em `/ops-map/`, que publica o mapa visual
 de sistemas, plataformas, integrações e sinais da operação PinkBlue.
+
+Para explorações visuais paralelas sem risco direto ao módulo principal, existe um
+espaço de sandbox separado em `/sandboxes/cards/`, usado para iterar variações de layout
+antes de decidir o que sobe para o Lab Monitor.
 
 ---
 
@@ -112,7 +116,7 @@ Esse desenho viabilizou a primeira fase do módulo, mas já é tratado como limi
     │   └── data/
     │       ├── pinkblue-map.v1.json       # grafo base estático
     │       └── pinkblue-map.runtime.json  # snapshot ao vivo (gerado por scripts/refresh_*)
-    └── lab-card-variants/   # Sandbox local com variações dos cards de exames
+    └── lab-card-variants/   # Sandbox servido em /sandboxes/cards/ para explorar cards de exames
         ├── index.html
         └── styles.css
 ```

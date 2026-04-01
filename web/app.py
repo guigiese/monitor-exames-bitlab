@@ -21,6 +21,7 @@ from notifiers.telegram_polling import (
 from web.ops_map import OPS_MAP_DIR, get_ops_map_runtime
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+CARD_SANDBOX_DIR = Path(__file__).parent.parent / "poc" / "lab-card-variants"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 APP_URL = os.environ.get("APP_URL", "https://pinkblue-vet-production.up.railway.app")
@@ -42,6 +43,7 @@ async def lifespan(app):
 app = FastAPI(lifespan=lifespan, title="PinkBlue Vet")
 router = APIRouter(prefix="/labmonitor")
 app.mount("/ops-map-static", StaticFiles(directory=str(OPS_MAP_DIR)), name="ops_map_static")
+app.mount("/sandboxes/cards", StaticFiles(directory=str(CARD_SANDBOX_DIR), html=True), name="cards_sandbox")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

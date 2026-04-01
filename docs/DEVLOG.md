@@ -716,3 +716,31 @@ Two large future projects were framed without implementation:
 - a financial reconciler focused on matching SimplesVet expectations against real bank/PSP/adquirente settlements.
 
 Both are intentionally defined as complementary to SimplesVet, not replacements for what it already does.
+
+---
+
+## Fase 18 - Card sandbox realigned to the exam list language and mobile ops-map tightened
+
+### Context
+The first card sandbox helped explore hierarchy and density, but it also drifted away from the
+real interaction model of the Lab Monitor exam list.
+
+At the same time, the hosted `/ops-map/` worked well on desktop but mobile still forced too much
+scrolling before the graph appeared.
+
+### What changed
+- the card sandbox was kept as a separate module and exposed through `/sandboxes/cards/`;
+- the main sandbox direction was rebuilt around stacked rows with horizontal reading, closer to the
+  current exam list structure;
+- the old side-by-side/square idea was preserved only as discovery, not as the active implementation track;
+- the mobile version of `/ops-map/` was compressed to bring the graph closer to the first fold and
+  cut duplicated explanation blocks.
+
+### Why this matters
+The sandbox now behaves like a safe visual lab:
+- close enough to the product language to make approval meaningful;
+- isolated enough to avoid contaminating the active interface with half-decided UX experiments.
+
+The ops-map change matters for the same reason:
+- mobile should reach the graph quickly;
+- operational summary should support the graph, not delay access to it.

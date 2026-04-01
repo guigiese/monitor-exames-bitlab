@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lab Monitor Card Variants</title>
+  <title>PinkBlue - Sandbox de Cards</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -12,45 +12,67 @@
 <body>
   <main class="shell">
     <header class="hero">
-      <p class="eyebrow">PinkBlue / Lab Monitor / Local-only</p>
-      <h1>Variacoes dos cards de exames</h1>
-      <p>
-        Ambiente local para comparar leituras mais leves dos cards do Lab Monitor,
-        com foco em reduzir densidade, destacar a data e tratar criticidade sem competir
-        com o badge principal de status.
+      <p class="eyebrow">PinkBlue / Sandbox / Railway-ready</p>
+      <h1>Sandbox de cards de exames</h1>
+      <p class="hero-copy">
+        Variacoes visuais no mesmo modelo da listagem real: cards empilhados, leitura horizontal
+        e foco em destacar data, status e criticidade sem densificar demais a linha principal.
       </p>
+      <div class="hero-note">
+        A exploracao antiga de layout lado-a-lado foi movida para discovery separada e nao e mais a trilha principal deste sandbox.
+      </div>
     </header>
 
-    <section class="grid">
+    <section class="variants">
       <article class="variant">
         <div class="variant-head">
           <div>
             <p class="variant-kicker">V1</p>
-            <h2>Signal rail</h2>
+            <h2>Date first</h2>
           </div>
-          <span class="variant-note">Criticidade na lateral</span>
+          <span class="variant-note">data e liberacao mais visiveis</span>
         </div>
-        <div class="exam-card rail-critical">
-          <div class="card-top">
-            <div>
-              <span class="status-pill status-progress">Em andamento</span>
+
+        <div class="list-stack">
+          <article class="exam-row">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="status-pill status-progress">Em andamento</span>
+                <span class="count-chip">2 exames</span>
+              </div>
               <h3>Mel</h3>
-              <p class="meta">Nexio Patologia • Nº 24-001281</p>
+              <div class="row-meta">
+                <span class="lab-chip">Nexio Patologia</span>
+                <span>No 24-001281</span>
+                <span class="date-strong">01/04</span>
+                <span class="soft-note">6d em aberto</span>
+              </div>
             </div>
-            <div class="date-block">
-              <strong>01/04</strong>
-              <span>6d em aberto</span>
+            <div class="row-side">
+              <span class="inline-alert is-critical">critico</span>
+              <a href="#" aria-disabled="true">Ver laudo</a>
             </div>
-          </div>
-          <p class="summary">Painel compacto com a data destacada e a criticidade saindo da disputa direta por badges.</p>
-          <div class="item-list">
-            <span>Citologia oncótica</span>
-            <span>Histopatológico</span>
-          </div>
-          <div class="card-foot">
-            <span class="foot-link">Ver laudo</span>
-            <span class="foot-alert">Critico</span>
-          </div>
+          </article>
+
+          <article class="exam-row">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="status-pill status-partial">Parcial</span>
+                <span class="count-chip">3 exames</span>
+              </div>
+              <h3>Luna</h3>
+              <div class="row-meta">
+                <span class="lab-chip">BioAnalises (BitLab)</span>
+                <span>No 08-00048193</span>
+                <span class="date-strong">30/03</span>
+                <span class="soft-note">2 itens prontos</span>
+              </div>
+            </div>
+            <div class="row-side">
+              <span class="inline-alert is-warning">atencao</span>
+              <a href="#" aria-disabled="true">Detalhes</a>
+            </div>
+          </article>
         </div>
       </article>
 
@@ -58,35 +80,51 @@
         <div class="variant-head">
           <div>
             <p class="variant-kicker">V2</p>
-            <h2>Status dot</h2>
+            <h2>Critical dot</h2>
           </div>
-          <span class="variant-note">Criticidade como ponto</span>
+          <span class="variant-note">criticidade sai da disputa de badges</span>
         </div>
-        <div class="exam-card">
-          <div class="card-top">
-            <div>
-              <div class="title-row">
-                <span class="status-dot warning"></span>
+
+        <div class="list-stack">
+          <article class="exam-row compact">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="critical-dot is-warning" aria-hidden="true"></span>
                 <span class="status-pill status-ready">Pronto</span>
+                <span class="count-chip">4 exames</span>
               </div>
-              <h3>Paçoca</h3>
-              <p class="meta">BioAnálises (BitLab) • Nº 08-00048192</p>
+              <h3>Pacoca</h3>
+              <div class="row-meta">
+                <span class="lab-chip">BioAnalises (BitLab)</span>
+                <span>No 08-00048192</span>
+                <span class="date-strong">31/03</span>
+                <span class="soft-note is-success">Lib. 10:42</span>
+              </div>
             </div>
-            <div class="date-block success">
-              <strong>31/03</strong>
-              <span>Lib. 10:42</span>
+            <div class="row-side">
+              <a href="#" aria-disabled="true">Abrir resultado</a>
             </div>
-          </div>
-          <p class="summary">A criticidade sai do texto e vira só um sinal visual sutil ao lado do status.</p>
-          <div class="item-list">
-            <span>Hemograma completo</span>
-            <span>ALT</span>
-            <span>Creatinina</span>
-          </div>
-          <div class="card-foot">
-            <span>3 exames</span>
-            <span class="foot-link">Abrir resultado</span>
-          </div>
+          </article>
+
+          <article class="exam-row compact">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="critical-dot is-neutral" aria-hidden="true"></span>
+                <span class="status-pill status-received">Recebido</span>
+                <span class="count-chip">1 exame</span>
+              </div>
+              <h3>Gaia</h3>
+              <div class="row-meta">
+                <span class="lab-chip">Nexio Patologia</span>
+                <span>No 24-001300</span>
+                <span class="date-strong">01/04</span>
+                <span class="soft-note">entrada recente</span>
+              </div>
+            </div>
+            <div class="row-side">
+              <a href="#" aria-disabled="true">Acompanhar</a>
+            </div>
+          </article>
         </div>
       </article>
 
@@ -94,32 +132,49 @@
         <div class="variant-head">
           <div>
             <p class="variant-kicker">V3</p>
-            <h2>Priority band</h2>
+            <h2>Signal rail</h2>
           </div>
-          <span class="variant-note">Barra interna discreta</span>
+          <span class="variant-note">sinal semantico discreto na borda</span>
         </div>
-        <div class="exam-card band-warning">
-          <div class="card-top">
-            <div>
-              <span class="status-pill status-partial">Parcial</span>
+
+        <div class="list-stack rail-list">
+          <article class="exam-row rail-critical">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="status-pill status-progress">Em andamento</span>
+                <span class="count-chip">2 exames</span>
+              </div>
+              <h3>Amora</h3>
+              <div class="row-meta">
+                <span class="lab-chip">Nexio Patologia</span>
+                <span>No 24-001287</span>
+                <span class="date-strong">29/03</span>
+                <span class="soft-note">8d em aberto</span>
+              </div>
+            </div>
+            <div class="row-side">
+              <span class="inline-alert is-critical">critico</span>
+            </div>
+          </article>
+
+          <article class="exam-row rail-warning">
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="status-pill status-partial">Parcial</span>
+                <span class="count-chip">3 exames</span>
+              </div>
               <h3>Luna</h3>
-              <p class="meta">BioAnálises (BitLab) • Nº 08-00048193</p>
+              <div class="row-meta">
+                <span class="lab-chip">BioAnalises (BitLab)</span>
+                <span>No 08-00048193</span>
+                <span class="date-strong">30/03</span>
+                <span class="soft-note">2 prontos, 1 analisando</span>
+              </div>
             </div>
-            <div class="date-block">
-              <strong>30/03</strong>
-              <span>2 itens prontos</span>
+            <div class="row-side">
+              <a href="#" aria-disabled="true">Ver detalhes</a>
             </div>
-          </div>
-          <p class="summary">A criticidade vira uma faixa semântica discreta no corpo, mantendo o status como selo principal.</p>
-          <div class="item-list stacked">
-            <span><b>Pronto</b> Hemograma completo</span>
-            <span><b>Pronto</b> ALT</span>
-            <span><b>Analisando</b> Ureia</span>
-          </div>
-          <div class="card-foot">
-            <span>Atualiza bem em mobile</span>
-            <span class="foot-link">Ver detalhes</span>
-          </div>
+          </article>
         </div>
       </article>
     </section>
