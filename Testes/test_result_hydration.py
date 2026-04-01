@@ -74,6 +74,42 @@ class ResultCacheTests(unittest.TestCase):
         finally:
             state.snapshots = original_snapshots
 
+    def test_get_exames_exposes_cached_result_rows(self):
+        original_snapshots = state.snapshots
+        original_config = state._config
+        try:
+            state._config = {
+                "labs": [{"id": "bitlab", "name": "BitLab"}],
+                "notifiers": [],
+                "interval_minutes": 5,
+            }
+            state.snapshots = {
+                "bitlab": {
+                    "REQ-1": {
+                        "label": "Bidu - Tutor",
+                        "data": "2026-04-01",
+                        "portal_id": "portal-1",
+                        "itens": {
+                            "I1": {
+                                "nome": "Hemograma",
+                                "status": "Pronto",
+                                "item_id": "item-1",
+                                "alerta": "yellow",
+                                "resultado": [{"nome": "Hemacias", "valor": "3,2", "referencia": "5,5 a 8,5", "alerta": "red"}],
+                            }
+                        },
+                    }
+                }
+            }
+
+            groups = state.get_exames()
+
+            self.assertEqual(len(groups), 1)
+            self.assertEqual(groups[0]["itens"][0]["resultado"][0]["nome"], "Hemacias")
+        finally:
+            state.snapshots = original_snapshots
+            state._config = original_config
+
 
 if __name__ == "__main__":
     unittest.main()

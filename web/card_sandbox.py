@@ -7,13 +7,13 @@ from pathlib import Path
 from web.state import normalize_status, state
 
 CARD_SANDBOX_DIR = Path(__file__).parent.parent / "poc" / "lab-card-variants"
-DEFAULT_CARD_SANDBOX_VARIANT = "balanced-finalist"
+DEFAULT_CARD_SANDBOX_VARIANT = "rail-clean"
 
 CARD_SANDBOX_VARIANTS = [
     {
         "id": "rail-clean",
         "name": "V1 · Rail clean",
-        "note": "Barra lateral discreta, data enxuta e meta bem direta.",
+        "note": "Linha-base compacta com barra lateral, clusters enxutos e foco em leitura horizontal.",
         "frame": "rail",
         "density": "compact",
         "date_style": "plain",
@@ -21,11 +21,55 @@ CARD_SANDBOX_VARIANTS = [
         "critical_style": "hidden",
         "meta_style": "inline",
         "timeline_style": "inline",
+        "status_detail": "none",
+        "meta_density": "compact",
     },
     {
-        "id": "rail-soft",
-        "name": "V2 · Rail soft",
-        "note": "Mantem a barra lateral e suaviza data e clusters.",
+        "id": "rail-clean-ratio",
+        "name": "V2 · Rail + ratio",
+        "note": "Derivada direta da V1 com a leitura 'x/y prontos' logo abaixo do status.",
+        "frame": "rail",
+        "density": "compact",
+        "date_style": "plain",
+        "status_style": "solid",
+        "critical_style": "hidden",
+        "meta_style": "inline",
+        "timeline_style": "inline",
+        "status_detail": "ready-ratio",
+        "meta_density": "compact",
+    },
+    {
+        "id": "rail-clean-tight",
+        "name": "V3 · Rail tighter",
+        "note": "Versao mais comprimida da V1, com paddings e tipografia ligeiramente menores.",
+        "frame": "rail",
+        "density": "tight",
+        "date_style": "plain",
+        "status_style": "solid",
+        "critical_style": "hidden",
+        "meta_style": "inline",
+        "timeline_style": "inline",
+        "status_detail": "none",
+        "meta_density": "tight",
+    },
+    {
+        "id": "rail-clean-tight-ratio",
+        "name": "V4 · Tight + ratio",
+        "note": "Combina a compactacao da V3 com o texto pequeno 'x/y prontos' sob o status.",
+        "frame": "rail",
+        "density": "tight",
+        "date_style": "plain",
+        "status_style": "solid",
+        "critical_style": "hidden",
+        "meta_style": "inline",
+        "timeline_style": "inline",
+        "status_detail": "ready-ratio",
+        "meta_density": "tight",
+    },
+    {
+        "id": "rail-soft-date",
+        "name": "V5 · Rail soft date",
+        "note": "Mantem a base da V1, mas suaviza a ancora da data e os clusters da ultima linha.",
         "frame": "rail",
         "density": "compact",
         "date_style": "soft",
@@ -33,126 +77,50 @@ CARD_SANDBOX_VARIANTS = [
         "critical_style": "hidden",
         "meta_style": "badges",
         "timeline_style": "inline",
+        "status_detail": "none",
+        "meta_density": "compact",
     },
     {
-        "id": "rail-split",
-        "name": "V3 · Rail split",
-        "note": "Status mais evidente e contagens com cluster proprio.",
-        "frame": "rail",
-        "density": "airy",
-        "date_style": "plain",
-        "status_style": "solid",
-        "critical_style": "hidden",
-        "meta_style": "badges",
-        "timeline_style": "badges",
-    },
-    {
-        "id": "rail-chip-date",
-        "name": "V4 · Rail + date chip",
-        "note": "Data com ancora visual mais marcada sem competir com o status.",
-        "frame": "rail",
-        "density": "airy",
-        "date_style": "chip",
-        "status_style": "solid",
-        "critical_style": "hidden",
-        "meta_style": "inline",
-        "timeline_style": "badges",
-    },
-    {
-        "id": "triangle-trailing",
-        "name": "V5 · Triangle trailing",
-        "note": "Criticidade vai para um triangulo fixo no canto superior.",
-        "frame": "plain",
-        "density": "compact",
-        "date_style": "plain",
-        "status_style": "solid",
-        "critical_style": "trailing",
-        "meta_style": "inline",
-        "timeline_style": "inline",
-    },
-    {
-        "id": "triangle-inline",
-        "name": "V6 · Triangle inline",
-        "note": "Triangulo ao lado do status para testar proximidade sem badge textual.",
-        "frame": "plain",
-        "density": "compact",
-        "date_style": "soft",
-        "status_style": "solid",
-        "critical_style": "inline",
-        "meta_style": "badges",
-        "timeline_style": "inline",
-    },
-    {
-        "id": "triangle-ghost",
-        "name": "V7 · Triangle ghost",
-        "note": "Status mais leve e criticidade com maior responsabilidade visual.",
-        "frame": "plain",
-        "density": "compact",
-        "date_style": "plain",
-        "status_style": "ghost",
-        "critical_style": "trailing",
-        "meta_style": "inline",
-        "timeline_style": "badges",
-    },
-    {
-        "id": "triangle-badge",
-        "name": "V8 · Triangle badge",
-        "note": "Triangulo recebe base sutil para ampliar leitura sem texto.",
-        "frame": "plain",
-        "density": "airy",
-        "date_style": "chip",
-        "status_style": "ghost",
-        "critical_style": "badge",
-        "meta_style": "badges",
-        "timeline_style": "inline",
-    },
-    {
-        "id": "border-quiet",
-        "name": "V9 · Border quiet",
-        "note": "A borda inteira absorve a criticidade e o interior fica mais leve.",
-        "frame": "border",
-        "density": "compact",
-        "date_style": "plain",
-        "status_style": "solid",
-        "critical_style": "hidden",
-        "meta_style": "inline",
-        "timeline_style": "inline",
-    },
-    {
-        "id": "border-date-chip",
-        "name": "V10 · Border + chip",
-        "note": "Borda critica com data em chip e clusters mais compactos.",
-        "frame": "border",
-        "density": "airy",
-        "date_style": "chip",
-        "status_style": "solid",
-        "critical_style": "hidden",
-        "meta_style": "badges",
-        "timeline_style": "inline",
-    },
-    {
-        "id": "hybrid-minimal",
-        "name": "V11 · Hybrid minimal",
-        "note": "Barra lateral somada a um triangulo pequeno para teste de redundancia.",
+        "id": "rail-inline-triangle",
+        "name": "V6 · Rail + triangle",
+        "note": "Testa a barra lateral junto com um triangulo pequeno ao lado do status.",
         "frame": "hybrid",
         "density": "compact",
-        "date_style": "soft",
-        "status_style": "ghost",
-        "critical_style": "trailing",
-        "meta_style": "inline",
-        "timeline_style": "badges",
-    },
-    {
-        "id": "balanced-finalist",
-        "name": "V12 · Balanced finalist",
-        "note": "Versao mais equilibrada para comparacao com a interface atual.",
-        "frame": "rail",
-        "density": "compact",
         "date_style": "plain",
         "status_style": "solid",
         "critical_style": "inline",
+        "meta_style": "inline",
+        "timeline_style": "inline",
+        "status_detail": "none",
+        "meta_density": "compact",
+    },
+    {
+        "id": "rail-minimal-border",
+        "name": "V7 · Rail border",
+        "note": "Mantem a leitura da V1, mas testa a criticidade na borda inteira para comparar limpeza.",
+        "frame": "border",
+        "density": "compact",
+        "date_style": "plain",
+        "status_style": "solid",
+        "critical_style": "hidden",
+        "meta_style": "inline",
+        "timeline_style": "inline",
+        "status_detail": "none",
+        "meta_density": "compact",
+    },
+    {
+        "id": "rail-chip-date-ratio",
+        "name": "V8 · Date chip + ratio",
+        "note": "Explora a data em chip e a contagem de prontos sob o status, sem sair da linguagem da V1.",
+        "frame": "rail",
+        "density": "compact",
+        "date_style": "chip",
+        "status_style": "solid",
+        "critical_style": "hidden",
         "meta_style": "badges",
         "timeline_style": "inline",
+        "status_detail": "ready-ratio",
+        "meta_density": "compact",
     },
 ]
 
@@ -250,6 +218,13 @@ _FALLBACK_PROTOCOLS = [
 ]
 
 _ALERT_RANK = {None: 0, "yellow": 1, "red": 2}
+_SPECIES_PREVIEW = ["cadela", "gato", "cão", "gata"]
+_SANDBOX_PREVIEW_OVERLAYS = [
+    {"days_open": 2, "species_sex": "cadela"},
+    {"days_open": 9, "species_sex": "gato"},
+    {"days_open": 5, "species_sex": "cão"},
+    {"days_open": 11, "species_sex": "gata"},
+]
 
 
 def _parse_label(label: str) -> tuple[str, str]:
@@ -383,6 +358,31 @@ def _humanize_status_counts(counts: dict[str, int]) -> list[dict]:
     return parts
 
 
+def _ready_ratio_text(counts: dict[str, int], total: int) -> str:
+    return f"{counts.get('Pronto', 0)}/{total} prontos"
+
+
+def _timeline_parts(days_open: int | None, release_at_iso: str | None) -> list[dict]:
+    if days_open is not None:
+        return [{"label": f"{days_open}d em aberto", "stale": days_open > 7}]
+    if release_at_iso:
+        return [{"label": f"Lib. {_format_release(release_at_iso)}", "stale": False}]
+    return []
+
+
+def _inject_sandbox_preview(group_view: dict, index: int) -> dict:
+    overlay = _SANDBOX_PREVIEW_OVERLAYS[index % len(_SANDBOX_PREVIEW_OVERLAYS)]
+    group_view["species_sex"] = overlay["species_sex"]
+
+    if group_view.get("days_em_aberto") is None:
+        group_view["days_em_aberto_preview"] = overlay["days_open"]
+        group_view["timeline_parts"] = _timeline_parts(overlay["days_open"], None)
+    else:
+        group_view["days_em_aberto_preview"] = group_view["days_em_aberto"]
+
+    return group_view
+
+
 def _build_group_view(group: dict) -> dict:
     snapshot_record = _snapshot_lookup(group["lab_id"], group["record_id"]) or {}
     patient_name, tutor_name = _parse_label(snapshot_record.get("label") or group["paciente"])
@@ -399,22 +399,17 @@ def _build_group_view(group: dict) -> dict:
         "release_at_display": _format_release(group.get("liberado_em_iso")),
         "criticality": group.get("alerta_geral") or _record_alert(snapshot_record),
         "items_total": len(items),
+        "ready_ratio_text": _ready_ratio_text(counts, len(items)),
         "status_counts": counts,
         "status_count_parts": _humanize_status_counts(counts),
-        "timeline_parts": [
-            {
-                "label": f"{group['dias_em_aberto']}d em aberto",
-                "stale": (group["dias_em_aberto"] or 0) > 7,
-            }
-        ]
-        if group.get("dias_em_aberto") is not None
-        else ([{"label": f"Lib. { _format_release(group.get('liberado_em_iso')) }", "stale": False}] if group.get("liberado_em_iso") else []),
+        "timeline_parts": _timeline_parts(group.get("dias_em_aberto"), group.get("liberado_em_iso")),
         "items_view": items,
     }
 
 
 def get_card_sandbox_groups(lab: str = "", status: str = "", q: str = "") -> list[dict]:
-    return [_build_group_view(group) for group in state.get_exames(lab, status, q)]
+    groups = [_build_group_view(group) for group in state.get_exames(lab, status, q)]
+    return [_inject_sandbox_preview(group, index) for index, group in enumerate(groups)]
 
 
 def _build_protocol(group: dict, reason: str) -> dict:

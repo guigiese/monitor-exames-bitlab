@@ -44,36 +44,67 @@
   {% endif %}
 {% endmacro %}
 
-{% macro resultado_btn(item) %}
-{% if item.item_id and item.status == "Pronto" %}
-<details class="resultado-detail mt-1.5">
-  <summary class="cursor-pointer text-xs text-indigo-500 hover:text-indigo-700 select-none inline-flex items-center gap-1 py-0.5"
-           hx-get="/labmonitor/partials/resultado/{{ item.item_id }}"
-           hx-target="next .resultado-body"
-           hx-swap="innerHTML"
-           hx-trigger="click once">
-    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-    </svg>
-    Ver resultado
-  </summary>
-  <div class="resultado-body mt-1.5 rounded-lg border border-gray-100 bg-white overflow-hidden">
-    <p class="text-gray-400 text-xs p-3 text-center">Carregando...</p>
-  </div>
-</details>
+{% macro result_rows(rows) %}
+{% if rows %}
+<div class="pb-item-result-table-wrap">
+  <table class="w-full text-xs">
+    <thead>
+      <tr class="border-b border-gray-200">
+        <th class="text-left py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide">Parâmetro</th>
+        <th class="text-right py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide">Resultado</th>
+        <th class="text-right py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Referência</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for row in rows %}
+      <tr class="{% if row.alerta == 'red' %}bg-red-50{% elif row.alerta == 'yellow' %}bg-yellow-50{% endif %}">
+        <td class="py-1.5 px-3 text-gray-700">
+          {% if row.alerta == 'red' %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle"></span>
+          {% elif row.alerta == 'yellow' %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 mr-1 align-middle"></span>
+          {% else %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-200 mr-1 align-middle"></span>
+          {% endif %}
+          {{ row.nome }}
+        </td>
+        <td class="py-1.5 px-3 text-right font-mono font-semibold {% if row.alerta == 'red' %}text-red-700{% elif row.alerta == 'yellow' %}text-yellow-700{% else %}text-gray-800{% endif %}">
+          {{ row.valor }}
+        </td>
+        <td class="py-1.5 px-3 text-right text-gray-400 hidden sm:table-cell">{{ row.referencia }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="pb-item-result-empty">Resultado não disponível.</p>
 {% endif %}
+{% endmacro %}
+
+{% macro item_label(item, item_id) %}
+  {% if item.status == "Pronto" %}
+  <details class="pb-item-result" {% if item.alert %}data-has-alert="{{ item.alert }}"{% endif %}>
+    <summary class="pb-item-summary">
+      <span class="pb-item-summary__label">{{ item.name }}</span>
+    </summary>
+    {{ result_rows(item.results) }}
+  </details>
+  {% else %}
+  <span class="truncate">{{ item.name }}</span>
+  {% endif %}
 {% endmacro %}
 
 {% if groups %}
 <div class="space-y-2.5">
   {% for g in groups %}
-  <details class="group pb-group bg-white border rounded-xl shadow-sm overflow-hidden pb-frame--{{ variant_cfg.frame }} pb-density--{{ variant_cfg.density }} pb-date--{{ variant_cfg.date_style }} pb-status--{{ variant_cfg.status_style }} pb-critical-mode--{{ variant_cfg.critical_style }} pb-meta--{{ variant_cfg.meta_style }} pb-timeline--{{ variant_cfg.timeline_style }} crit-{{ g.criticality or 'none' }} {% if g.status_geral != 'Pronto' %}open{% endif %}">
+  <details class="group pb-group bg-white border rounded-xl shadow-sm overflow-hidden pb-frame--{{ variant_cfg.frame }} pb-density--{{ variant_cfg.density }} pb-date--{{ variant_cfg.date_style }} pb-status--{{ variant_cfg.status_style }} pb-critical-mode--{{ variant_cfg.critical_style }} pb-meta--{{ variant_cfg.meta_style }} pb-meta-density--{{ variant_cfg.meta_density }} pb-timeline--{{ variant_cfg.timeline_style }} crit-{{ g.criticality or 'none' }} {% if g.status_geral != 'Pronto' %}open{% endif %}">
     <summary class="pb-summary cursor-pointer list-none select-none hover:bg-gray-50 active:bg-gray-100">
       <div class="pb-summary__body">
         <div class="pb-summary__top">
           <span class="pb-date">{{ g.date_display }}</span>
-          <div class="pb-signals">
+          <div class="pb-signals pb-signals--stack">
+            <div class="pb-signals__main">
             {% if variant_cfg.critical_style == "inline" %}
               {{ critical_icon(g.criticality, "inline") }}
             {% endif %}
@@ -83,6 +114,10 @@
             {% elif variant_cfg.critical_style == "badge" %}
               {{ critical_icon(g.criticality, "badge") }}
             {% endif %}
+            </div>
+            {% if variant_cfg.status_detail == "ready-ratio" %}
+            <span class="pb-status-detail">{{ g.ready_ratio_text }}</span>
+            {% endif %}
           </div>
         </div>
 
@@ -90,6 +125,9 @@
           <strong class="pb-patient">{{ g.patient_name }}</strong>
           {% if g.tutor_name %}
           <span class="pb-tutor">{{ g.tutor_name }}</span>
+          {% endif %}
+          {% if g.species_sex %}
+          <span class="pb-species">{{ g.species_sex }}</span>
           {% endif %}
         </div>
 
@@ -100,7 +138,13 @@
             {% if g.portal_url %}
             <a href="{{ g.portal_url }}" target="_blank" rel="noopener"
                onclick="event.stopPropagation()"
-               class="text-xs text-indigo-500 hover:text-indigo-700 underline whitespace-nowrap">Ver laudo</a>
+               class="pb-external-link">
+              <span>Ver laudo</span>
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5v14h14v-5"/>
+              </svg>
+            </a>
             {% endif %}
           </div>
 
@@ -140,11 +184,10 @@
             {% else %}
               <span class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></span>
             {% endif %}
-            <span class="truncate">{{ item.name }}</span>
+            <span class="min-w-0">{{ item_label(item, loop.index) }}</span>
           </span>
           {{ badge_item(item.status) }}
         </div>
-        {% if g.lab_id == "bitlab" %}{{ resultado_btn(item) }}{% endif %}
       </div>
       {% endfor %}
     </div>
@@ -164,8 +207,7 @@
                   <span class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></span>
                 {% endif %}
                 <div class="min-w-0">
-                  <div class="truncate">{{ item.name }}</div>
-                  {% if g.lab_id == "bitlab" %}{{ resultado_btn(item) }}{% endif %}
+                  <div class="min-w-0">{{ item_label(item, loop.index) }}</div>
                 </div>
               </div>
             </td>
