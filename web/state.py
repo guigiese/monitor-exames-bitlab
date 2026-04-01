@@ -180,6 +180,7 @@ class AppState:
                         "liberado_em": item.get("liberado_em"),
                         "item_id":     item.get("item_id"),
                         "alerta":      item.get("alerta"),
+                        "resultado":   item.get("resultado") or [],
                     })
 
                 if not itens:
@@ -256,6 +257,7 @@ class AppState:
                         "status":  i["status"],
                         "item_id": i["item_id"],
                         "alerta":  i["alerta"],
+                        "resultado": i["resultado"],
                     }
                     for i in itens
                 ]

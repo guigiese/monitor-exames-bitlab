@@ -7,7 +7,7 @@
 {% block content %}
 
 <p class="text-xs text-gray-400 mb-3">
-  Sandbox visual: a pagina espelha a listagem real de exames e varia apenas o agrupador do protocolo.
+  Sandbox visual: a pagina espelha a listagem real de exames e varia apenas o agrupador do protocolo. Alguns sinais de espécie/sexo e atraso foram injetados apenas aqui para estressar o layout.
 </p>
 
 <form class="flex flex-wrap gap-2 mb-5" method="get">
@@ -45,7 +45,7 @@
           class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
     Filtrar
   </button>
-  {% if lab_filter or status_filter or q or variant_filter != "balanced-finalist" %}
+  {% if lab_filter or status_filter or q or variant_filter != "rail-clean" %}
   <a href="/sandboxes/cards/?variant={{ variant_filter }}"
      class="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50 text-gray-600">Limpar</a>
   {% endif %}
