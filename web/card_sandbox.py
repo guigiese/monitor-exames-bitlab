@@ -264,6 +264,8 @@ def _candidate_score(candidate: dict, protocols: list[dict], missing: set[str]) 
     score = 0
     statuses = {protocol["status"] for protocol in protocols}
     labs = {protocol["labId"] for protocol in protocols}
+    patients = {protocol["patientName"] for protocol in protocols}
+    reasons = {protocol["sampleReason"] for protocol in protocols}
 
     if "status" in missing and candidate["status"] not in statuses:
         score += 2
@@ -271,8 +273,17 @@ def _candidate_score(candidate: dict, protocols: list[dict], missing: set[str]) 
         score += 2
     if "criticality" in missing and candidate["criticality"]:
         score += 3
+        if candidate["criticality"] == "red":
+            score += 2
     if "multi-item" in missing and len(candidate["items"]) > 1:
         score += 2
+
+    if candidate["patientName"] in patients:
+        score -= 5
+    if candidate["sampleReason"] in reasons:
+        score -= 2
+    if candidate["status"] in statuses and "status" not in missing:
+        score -= 1
 
     score += max(0, len(candidate["items"]) - 1)
     return score
