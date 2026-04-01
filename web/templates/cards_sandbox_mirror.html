@@ -7,11 +7,12 @@
 {% block content %}
 
 <p class="text-xs text-gray-400 mb-3">
-  Sandbox visual: a pagina espelha a listagem real de exames e varia apenas o agrupador do protocolo. Alguns sinais de espécie/sexo e atraso foram injetados apenas aqui para estressar o layout.
+  Sandbox visual: a página espelha a listagem real de exames e varia apenas o agrupador do protocolo.
+  Esta rodada usa protocolos fixos e completos para acelerar a comparação entre versões.
 </p>
 
 <form class="flex flex-wrap gap-2 mb-5" method="get">
-  <select name="variant" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-[220px]">
+  <select name="variant" onchange="this.form.requestSubmit()" class="border rounded-lg px-3 py-2 text-sm bg-white min-w-[220px]">
     {% for item in variants %}
     <option value="{{ item.id }}" {% if variant_filter == item.id %}selected{% endif %}>{{ item.name }}</option>
     {% endfor %}
@@ -21,7 +22,7 @@
     <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
          fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"></path>
     </svg>
     <input type="text" name="q" value="{{ q }}" placeholder="Buscar paciente..."
            class="w-full border rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -45,7 +46,7 @@
           class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
     Filtrar
   </button>
-  {% if lab_filter or status_filter or q or variant_filter != "rail-clean" %}
+  {% if lab_filter or status_filter or q or variant_filter != "v1-reference" %}
   <a href="/sandboxes/cards/?variant={{ variant_filter }}"
      class="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50 text-gray-600">Limpar</a>
   {% endif %}
@@ -58,7 +59,7 @@
 
 {% if groups %}
 <p class="text-xs text-gray-400 mb-3">
-  {{ groups | length }} requisicao{% if groups | length != 1 %}oes{% endif %}
+  {{ groups | length }} {{ "requisição" if groups | length == 1 else "requisições" }}
   {% if q %} para "<span class="font-medium text-gray-600">{{ q }}</span>"{% endif %}
 </p>
 {% endif %}

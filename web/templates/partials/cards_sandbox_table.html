@@ -1,4 +1,4 @@
-{% macro badge_geral(status, style) %}
+{% macro badge_geral(status) %}
   {% set tone = {
     "Pronto": "ready",
     "Parcial": "partial",
@@ -6,7 +6,7 @@
     "Em Andamento": "progress",
     "Recebido": "received"
   }.get(status, "neutral") %}
-  <span class="pb-status-badge pb-status-badge--{{ style }} is-{{ tone }}">
+  <span class="pb-status-badge is-{{ tone }}">
     {% if status == "Pronto" %}
       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
     {% elif status == "Parcial" %}
@@ -18,16 +18,6 @@
     {% endif %}
     {{ status }}
   </span>
-{% endmacro %}
-
-{% macro critical_icon(alerta, style) %}
-  {% if alerta %}
-  <span class="pb-critical pb-critical--{{ style }} is-{{ alerta }}">
-    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-    </svg>
-  </span>
-  {% endif %}
 {% endmacro %}
 
 {% macro badge_item(status) %}
@@ -44,9 +34,49 @@
   {% endif %}
 {% endmacro %}
 
-{% macro result_rows(rows) %}
+{% macro species_badge(species_sex, mode) %}
+  {% if species_sex %}
+    {% set label = species_sex | trim %}
+    {% set lower_label = label | lower %}
+    {% set is_female = lower_label in ["cadela", "gata"] %}
+    {% set is_male = lower_label in ["cão", "cao", "gato"] %}
+    {% set is_dog = lower_label in ["cão", "cao", "cadela"] %}
+    {% set visual_label = label if mode == "neutral-lower" else label | capitalize %}
+    {% set tone = "female" if is_female else "male" if is_male else "neutral" %}
+    <span class="pb-species-badge{% if mode == "sex-colored" %} is-{{ tone }} is-iconic{% endif %}">
+      {% if mode == "sex-colored" %}
+      <span class="pb-species-badge__icon" aria-hidden="true">{{ "🐶" if is_dog else "🐱" }}</span>
+      {% endif %}
+      <span>{{ visual_label }}</span>
+    </span>
+  {% endif %}
+{% endmacro %}
+
+{% macro item_marker(level, style) %}
+  {% if style in ["triangle-alert-only", "triangle-alert-reserved"] %}
+    {% if level in ["red", "yellow"] %}
+    <span class="pb-item-marker is-{{ level }}">
+      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+      </svg>
+    </span>
+    {% elif style == "triangle-alert-reserved" %}
+    <span class="pb-item-marker-spacer" aria-hidden="true"></span>
+    {% endif %}
+  {% else %}
+    {% if level == "red" %}
+      <span class="pb-item-dot is-red"></span>
+    {% elif level == "yellow" %}
+      <span class="pb-item-dot is-yellow"></span>
+    {% else %}
+      <span class="pb-item-dot is-neutral"></span>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro result_rows(rows, table_width) %}
 {% if rows %}
-<div class="pb-item-result-table-wrap">
+<div class="pb-item-result-table-wrap is-{{ table_width }}">
   <table class="w-full text-xs">
     <thead>
       <tr class="border-b border-gray-200">
@@ -82,92 +112,98 @@
 {% endif %}
 {% endmacro %}
 
-{% macro item_label(item, item_id) %}
+{% macro item_toggle(item, alert_style, table_width) %}
   {% if item.status == "Pronto" %}
-  <details class="pb-item-result" {% if item.alert %}data-has-alert="{{ item.alert }}"{% endif %}>
-    <summary class="pb-item-summary">
-      <span class="pb-item-summary__label">{{ item.name }}</span>
+  <details class="pb-item-result-row" {% if item.alert %}data-has-alert="{{ item.alert }}"{% endif %}>
+    <summary class="pb-item-row-toggle">
+      <span class="pb-item-row-toggle__label">{{ item.name }}</span>
     </summary>
-    {{ result_rows(item.results) }}
+    {{ result_rows(item.results, table_width) }}
   </details>
   {% else %}
-  <span class="truncate">{{ item.name }}</span>
+  <div class="pb-item-row-toggle is-static">
+    <span class="pb-item-row-toggle__label">{{ item.name }}</span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro external_link(url) %}
+  {% if url %}
+  <a href="{{ url }}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="pb-external-link">
+    <span>Ver laudo</span>
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3h7m0 0v7m0-7L10 14"></path>
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 5v14h14v-5"></path>
+    </svg>
+  </a>
   {% endif %}
 {% endmacro %}
 
 {% if groups %}
 <div class="space-y-2.5">
   {% for g in groups %}
-  <details class="group pb-group bg-white border rounded-xl shadow-sm overflow-hidden pb-frame--{{ variant_cfg.frame }} pb-density--{{ variant_cfg.density }} pb-date--{{ variant_cfg.date_style }} pb-status--{{ variant_cfg.status_style }} pb-critical-mode--{{ variant_cfg.critical_style }} pb-meta--{{ variant_cfg.meta_style }} pb-meta-density--{{ variant_cfg.meta_density }} pb-timeline--{{ variant_cfg.timeline_style }} crit-{{ g.criticality or 'none' }} {% if g.status_geral != 'Pronto' %}open{% endif %}">
+  <details class="group pb-group pb-variant--{{ variant_cfg.id }} pb-rail-palette--{{ variant_cfg.rail_palette }} pb-rail-shape--{{ variant_cfg.rail_shape }} pb-density--{{ variant_cfg.card_density }} bg-white border rounded-xl shadow-sm overflow-hidden crit-{{ g.criticality or 'none' }}">
     <summary class="pb-summary cursor-pointer list-none select-none hover:bg-gray-50 active:bg-gray-100">
       <div class="pb-summary__body">
-        <div class="pb-summary__top">
-          <span class="pb-date">{{ g.date_display }}</span>
-          <div class="pb-signals pb-signals--stack">
-            <div class="pb-signals__main">
-            {% if variant_cfg.critical_style == "inline" %}
-              {{ critical_icon(g.criticality, "inline") }}
+        <div class="pb-card-main">
+          {% if variant_cfg.date_mode == "floating-top-left" %}
+          <span class="pb-date-overlay">
+            <span class="pb-date">{{ g.date_display }}</span>
+            {% if g.time_display %}
+            <span class="pb-time">{{ g.time_display }}</span>
             {% endif %}
-            {{ badge_geral(g.status_geral, variant_cfg.status_style) }}
-            {% if variant_cfg.critical_style == "trailing" %}
-              {{ critical_icon(g.criticality, "trailing") }}
-            {% elif variant_cfg.critical_style == "badge" %}
-              {{ critical_icon(g.criticality, "badge") }}
+          </span>
+          {% endif %}
+
+          <div class="pb-row pb-row--identity">
+            <strong class="pb-patient">{{ g.patient_name }}</strong>
+            {% if g.tutor_name %}
+            <span class="pb-tutor">{{ g.tutor_name }}</span>
             {% endif %}
-            </div>
-            {% if variant_cfg.status_detail == "ready-ratio" %}
-            <span class="pb-status-detail">{{ g.ready_ratio_text }}</span>
-            {% endif %}
+            {{ species_badge(g.species_sex, variant_cfg.species_badge_mode) }}
           </div>
+
+          <div class="pb-row pb-row--meta">
+            {% if variant_cfg.meta_layout == "inline" and variant_cfg.date_mode == "inline-meta" %}
+            <span class="pb-date-inline">
+              <span class="pb-date">{{ g.date_display }}</span>
+              {% if g.time_display %}
+              <span class="pb-time">{{ g.time_display }}</span>
+              {% endif %}
+            </span>
+            {% endif %}
+            <span class="pb-lab">{{ g.lab }}</span>
+            {% if variant_cfg.meta_layout == "inline" %}
+            <span class="pb-protocol">Nº {{ g.protocol }}</span>
+            {% endif %}
+            {{ external_link(g.portal_url) }}
+          </div>
+
+          {% if variant_cfg.meta_layout == "third-line-compact" %}
+          <div class="pb-row pb-row--micro">
+            <span class="pb-date-inline is-micro">
+              <span class="pb-date">{{ g.date_display }}</span>
+              {% if g.time_display %}
+              <span class="pb-time">{{ g.time_display }}</span>
+              {% endif %}
+            </span>
+            <span class="pb-protocol pb-protocol--micro">Nº {{ g.protocol }}</span>
+          </div>
+          {% endif %}
         </div>
 
-        <div class="pb-summary__identity">
-          <strong class="pb-patient">{{ g.patient_name }}</strong>
-          {% if g.tutor_name %}
-          <span class="pb-tutor">{{ g.tutor_name }}</span>
+        <div class="pb-signals pb-signals--{{ variant_cfg.signals_align }}">
+          {{ badge_geral(g.status_geral) }}
+          <span class="pb-status-detail">{{ g.ready_ratio_text }}</span>
+          {% if g.days_label %}
+          <span class="pb-days {% if g.days_stale %}is-stale{% endif %}">{{ g.days_label }}</span>
           {% endif %}
-          {% if g.species_sex %}
-          <span class="pb-species">{{ g.species_sex }}</span>
-          {% endif %}
-        </div>
-
-        <div class="pb-summary__meta">
-          <div class="pb-meta-left">
-            <span class="pb-chip pb-chip--lab">{{ g.lab }}</span>
-            <span class="pb-chip pb-chip--protocol">Nº {{ g.protocol }}</span>
-            {% if g.portal_url %}
-            <a href="{{ g.portal_url }}" target="_blank" rel="noopener"
-               onclick="event.stopPropagation()"
-               class="pb-external-link">
-              <span>Ver laudo</span>
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14"/>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5v14h14v-5"/>
-              </svg>
-            </a>
-            {% endif %}
-          </div>
-
-          <div class="pb-meta-right">
-            <div class="pb-cluster pb-cluster--counts">
-              {% for part in g.status_count_parts %}
-              <span class="pb-chip pb-chip--count is-{{ part.tone }}">{{ part.label }}</span>
-              {% endfor %}
-            </div>
-            {% if g.timeline_parts %}
-            <div class="pb-cluster pb-cluster--timeline">
-              {% for part in g.timeline_parts %}
-              <span class="pb-chip pb-chip--timeline {% if part.stale %}is-stale{% endif %}">{{ part.label }}</span>
-              {% endfor %}
-            </div>
-            {% endif %}
-          </div>
         </div>
       </div>
 
       <span class="pb-chevron" aria-hidden="true">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
       </span>
     </summary>
@@ -175,17 +211,11 @@
     <div class="border-t border-gray-100 divide-y divide-gray-50 md:hidden">
       {% for item in g.items_view %}
       <div class="px-4 py-2.5 text-sm {% if item.alert == 'red' %}bg-red-50{% elif item.alert == 'yellow' %}bg-yellow-50{% endif %}">
-        <div class="flex items-center justify-between gap-3">
-          <span class="text-gray-700 flex items-center gap-1.5 min-w-0">
-            {% if item.alert == 'red' %}
-              <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
-            {% elif item.alert == 'yellow' %}
-              <span class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>
-            {% else %}
-              <span class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></span>
-            {% endif %}
-            <span class="min-w-0">{{ item_label(item, loop.index) }}</span>
-          </span>
+        <div class="flex items-start justify-between gap-3">
+          <div class="text-gray-700 flex items-start gap-1.5 min-w-0 flex-1">
+            {{ item_marker(item.alert, variant_cfg.item_alert_style) }}
+            <div class="min-w-0 flex-1">{{ item_toggle(item, variant_cfg.item_alert_style, variant_cfg.result_table_width) }}</div>
+          </div>
           {{ badge_item(item.status) }}
         </div>
       </div>
@@ -198,20 +228,12 @@
           {% for item in g.items_view %}
           <tr class="hover:bg-gray-50 {% if item.alert == 'red' %}bg-red-50{% elif item.alert == 'yellow' %}bg-yellow-50{% endif %}">
             <td class="pl-5 pr-4 py-2.5">
-              <div class="flex items-center gap-2 text-gray-700">
-                {% if item.alert == 'red' %}
-                  <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
-                {% elif item.alert == 'yellow' %}
-                  <span class="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>
-                {% else %}
-                  <span class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></span>
-                {% endif %}
-                <div class="min-w-0">
-                  <div class="min-w-0">{{ item_label(item, loop.index) }}</div>
-                </div>
+              <div class="flex items-start gap-2 text-gray-700 min-w-0">
+                {{ item_marker(item.alert, variant_cfg.item_alert_style) }}
+                <div class="min-w-0 flex-1">{{ item_toggle(item, variant_cfg.item_alert_style, variant_cfg.result_table_width) }}</div>
               </div>
             </td>
-            <td class="pr-5 py-2.5 text-right">{{ badge_item(item.status) }}</td>
+            <td class="pr-5 py-2.5 text-right align-top">{{ badge_item(item.status) }}</td>
           </tr>
           {% endfor %}
         </tbody>
