@@ -94,7 +94,11 @@ def _split_patient_label(label: str) -> tuple[str, str]:
     if " - " not in label:
         return label.strip(), ""
     patient, tutor = label.split(" - ", 1)
-    return patient.strip(), tutor.strip()
+    tutor = tutor.strip()
+    tutor_upper = tutor.upper()
+    if "PROP:" in tutor_upper:
+        tutor = tutor[tutor_upper.rfind("PROP:") + len("PROP:"):].strip()
+    return patient.strip(), tutor
 
 
 def _format_date(raw: str | None) -> str:

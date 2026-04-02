@@ -116,6 +116,38 @@ class ResultCacheTests(unittest.TestCase):
             state.snapshots = original_snapshots
             state._config = original_config
 
+    def test_get_exames_strips_prop_prefix_from_tutor_label(self):
+        original_snapshots = state.snapshots
+        original_config = state._config
+        try:
+            state._config = {
+                "labs": [{"id": "bitlab", "name": "BitLab"}],
+                "notifiers": [],
+                "interval_minutes": 5,
+            }
+            state.snapshots = {
+                "bitlab": {
+                    "REQ-2": {
+                        "label": "PIDA - JINGWEI DU PROP: JINGWEI DU",
+                        "data": "2026-04-01",
+                        "itens": {
+                            "I1": {
+                                "nome": "Hemograma",
+                                "status": "Pronto",
+                            }
+                        },
+                    }
+                }
+            }
+
+            groups = state.get_exames()
+
+            self.assertEqual(groups[0]["patient_name"], "PIDA")
+            self.assertEqual(groups[0]["tutor_name"], "JINGWEI DU")
+        finally:
+            state.snapshots = original_snapshots
+            state._config = original_config
+
 
 if __name__ == "__main__":
     unittest.main()
