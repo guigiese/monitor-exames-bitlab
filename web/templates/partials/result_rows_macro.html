@@ -1,0 +1,71 @@
+{% macro result_rows(rows, table_width) %}
+{% if rows %}
+<div class="pb-item-result-table-wrap is-{{ table_width }}">
+  <table class="w-full text-xs">
+    <thead>
+      <tr class="border-b border-gray-200">
+        <th class="text-left py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide">Parametro</th>
+        <th class="text-right py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide">Resultado</th>
+        <th class="text-right py-1.5 px-3 font-semibold text-gray-500 uppercase tracking-wide hidden sm:table-cell">Referencia</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for row in rows %}
+      <tr class="{% if row.alerta == 'red' %}bg-red-50{% elif row.alerta == 'yellow' %}bg-yellow-50{% endif %}">
+        <td class="py-1.5 px-3 text-gray-700">
+          {% if row.alerta == 'red' %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500 mr-1 align-middle"></span>
+          {% elif row.alerta == 'yellow' %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 mr-1 align-middle"></span>
+          {% else %}
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-gray-200 mr-1 align-middle"></span>
+          {% endif %}
+          {{ row.nome }}
+        </td>
+        <td class="py-1.5 px-3 text-right font-mono font-semibold {% if row.alerta == 'red' %}text-red-700{% elif row.alerta == 'yellow' %}text-yellow-700{% else %}text-gray-800{% endif %}">
+          {% if row.components %}
+            <div class="flex flex-col items-end gap-1">
+              {% for component in row.components %}
+              <div>{{ component.valor }}</div>
+              {% endfor %}
+            </div>
+          {% else %}
+            {{ row.valor }}
+          {% endif %}
+        </td>
+        <td class="py-1.5 px-3 text-right text-gray-400 hidden sm:table-cell">
+          {% if row.components %}
+            <div class="flex flex-col items-end gap-1">
+              {% for component in row.components %}
+              <div>{{ component.referencia }}</div>
+              {% endfor %}
+            </div>
+          {% else %}
+            {{ row.referencia }}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="pb-item-result-empty">Resultado nao disponivel.</p>
+{% endif %}
+{% endmacro %}
+
+{% macro report_text_block(item) %}
+{% if item.report_text %}
+<div class="px-3 py-2.5 text-xs leading-5 text-gray-700 whitespace-pre-line max-h-80 overflow-y-auto">
+  {% if item.diagnosis_text %}
+  <div class="mb-2">
+    <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Diagnostico</p>
+    <p class="mt-1">{{ item.diagnosis_text }}</p>
+  </div>
+  {% endif %}
+  <div>{{ item.report_text }}</div>
+</div>
+{% else %}
+<p class="pb-item-result-empty">Resultado nao disponivel.</p>
+{% endif %}
+{% endmacro %}
