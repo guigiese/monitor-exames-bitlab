@@ -172,6 +172,8 @@ def _normalize_age_bucket(*values: str) -> str:
         norm = _strip_accents((value or "").strip().lower())
         if not norm:
             continue
+        if norm in {"n/e", "ne", "n/d", "nd", "nao informado", "nao especificado"}:
+            return "adult"
         months = re.search(r"(\d+)\s*(mes|meses)", norm)
         if months:
             return "juvenile" if int(months.group(1)) < 12 else "adult"
@@ -216,6 +218,32 @@ def _extract_layout_a_reference_options(ref_candidates: list[dict]) -> list[str]
     return options
 
 
+def _layout_a_context(
+    sorted_tops: list[int],
+    rows_by_top: dict[int, list[dict]],
+    current_index: int,
+    patient_context: dict | None,
+) -> dict:
+    patient_context = patient_context or {}
+    patient_species = _normalize_species_key(
+        patient_context.get("species_sex", ""),
+        patient_context.get("species_raw", ""),
+    )
+    patient_age_bucket = _normalize_age_bucket(
+        patient_context.get("patient_age", ""),
+        patient_context.get("idade", ""),
+    ) or "adult"
+    headers = _recent_layout_headers(sorted_tops, rows_by_top, current_index)
+    has_species_headers = any("caninos" in h and "felinos" in h for h in headers)
+    has_age_headers = any("adultos" in h and "filhotes" in h for h in headers)
+    return {
+        "patient_species": patient_species,
+        "patient_age_bucket": patient_age_bucket,
+        "has_species_headers": has_species_headers,
+        "has_age_headers": has_age_headers,
+    }
+
+
 def _select_layout_a_reference(
     ref_candidates: list[dict],
     numeric_candidates: list[dict],
@@ -228,18 +256,11 @@ def _select_layout_a_reference(
     if not options:
         return ""
 
-    patient_context = patient_context or {}
-    patient_species = _normalize_species_key(
-        patient_context.get("species_sex", ""),
-        patient_context.get("species_raw", ""),
-    )
-    patient_age_bucket = _normalize_age_bucket(
-        patient_context.get("patient_age", ""),
-        patient_context.get("idade", ""),
-    )
-    headers = _recent_layout_headers(sorted_tops, rows_by_top, current_index)
-    has_species_headers = any("caninos" in h and "felinos" in h for h in headers)
-    has_age_headers = any("adultos" in h and "filhotes" in h for h in headers)
+    ctx = _layout_a_context(sorted_tops, rows_by_top, current_index, patient_context)
+    patient_species = ctx["patient_species"]
+    patient_age_bucket = ctx["patient_age_bucket"]
+    has_species_headers = ctx["has_species_headers"]
+    has_age_headers = ctx["has_age_headers"]
 
     if len(options) > 1 and has_species_headers and patient_species in {"canine", "feline"}:
         species_idx = 0 if patient_species == "canine" else 1
@@ -255,6 +276,72 @@ def _select_layout_a_reference(
             return options[age_idx]
 
     return options[0]
+
+
+def _format_layout_a_component_value(value_str: str, component_kind: str) -> str:
+    value = (value_str or "").strip()
+    if not value:
+        return ""
+    if component_kind == "percent":
+        return value if "%" in value else f"{value}%"
+    if component_kind == "absolute":
+        return value if "/mm" in value.lower() else f"{value}/mm3"
+    return value
+
+
+def _layout_a_component_kind(idx: int) -> str:
+    if idx == 0:
+        return "percent"
+    if idx == 1:
+        return "absolute"
+    return "value"
+
+
+def _build_layout_a_components(
+    ref_candidates: list[dict],
+    numeric_candidates: list[dict],
+    sorted_tops: list[int],
+    rows_by_top: dict[int, list[dict]],
+    current_index: int,
+    patient_context: dict | None,
+) -> list[dict]:
+    numbers = [c["text"].strip() for c in sorted(numeric_candidates, key=lambda entry: entry["left"])]
+    options = _extract_layout_a_reference_options(ref_candidates)
+    ctx = _layout_a_context(sorted_tops, rows_by_top, current_index, patient_context)
+
+    refs: list[str] = []
+    if ctx["has_species_headers"] and len(options) > 1:
+        refs.append(
+            _select_layout_a_reference(
+                ref_candidates,
+                numeric_candidates,
+                sorted_tops,
+                rows_by_top,
+                current_index,
+                patient_context,
+            )
+        )
+        refs.extend("" for _ in range(max(0, len(numbers) - 1)))
+    elif len(options) >= len(numbers):
+        refs = options[:len(numbers)]
+    elif len(options) == 1:
+        refs = [options[0]]
+        refs.extend("" for _ in range(max(0, len(numbers) - 1)))
+    else:
+        refs = options[:]
+        refs.extend("" for _ in range(max(0, len(numbers) - len(refs))))
+
+    components: list[dict] = []
+    for idx, value_str in enumerate(numbers):
+        component_kind = _layout_a_component_kind(idx)
+        ref_str = refs[idx] if idx < len(refs) else ""
+        components.append({
+            "kind": component_kind,
+            "valor": _format_layout_a_component_value(value_str, component_kind),
+            "referencia": ref_str or "n/d",
+            "alerta": _calc_alert_single(value_str, ref_str),
+        })
+    return components
 
 
 def _calc_alert_single(value_str: str, ref_str: str) -> str | None:
@@ -461,21 +548,44 @@ class BitlabConnector(LabConnector):
                 )
                 if not val_col:
                     continue
-                value_str = val_col["text"].strip()
-                ref_str = _select_layout_a_reference(
-                    ref_candidates,
-                    numeric_candidates,
-                    sorted_tops,
-                    rows_by_top,
-                    i,
-                    patient_context,
-                )
-                results.append({
-                    "nome":       name,
-                    "valor":      value_str,
-                    "referencia": ref_str,
-                    "alerta":     _calc_alert_single(value_str, ref_str),
-                })
+                if len(numeric_candidates) > 1:
+                    components = _build_layout_a_components(
+                        ref_candidates,
+                        numeric_candidates,
+                        sorted_tops,
+                        rows_by_top,
+                        i,
+                        patient_context,
+                    )
+                    worst = max(
+                        (component["alerta"] for component in components),
+                        key=lambda level: _ALERT_RANK.get(level, 0),
+                        default=None,
+                    )
+                    primary = components[0] if components else {"valor": "", "referencia": "n/d"}
+                    results.append({
+                        "nome": name,
+                        "valor": primary["valor"],
+                        "referencia": primary["referencia"],
+                        "alerta": worst,
+                        "components": components,
+                    })
+                else:
+                    value_str = val_col["text"].strip()
+                    ref_str = _select_layout_a_reference(
+                        ref_candidates,
+                        numeric_candidates,
+                        sorted_tops,
+                        rows_by_top,
+                        i,
+                        patient_context,
+                    )
+                    results.append({
+                        "nome":       name,
+                        "valor":      value_str,
+                        "referencia": ref_str,
+                        "alerta":     _calc_alert_single(value_str, ref_str),
+                    })
 
             else:
                 # Layout B — value on current row, species refs on look-ahead rows
@@ -631,7 +741,7 @@ class BitlabConnector(LabConnector):
                 if ant_rec.get(field) and not record.get(field):
                     record[field] = ant_rec[field]
 
-            if record.get("species_sex") and record.get("breed"):
+            if record.get("species_sex") and record.get("breed") and record.get("patient_age"):
                 continue
 
             portal_id = record.get("portal_id")

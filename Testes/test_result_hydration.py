@@ -2,6 +2,7 @@ import unittest
 import zlib
 
 import core
+from fastapi.testclient import TestClient
 from labs.bitlab import BitlabConnector
 from labs.nexio import NexioConnector
 from web import app as web_app
@@ -360,8 +361,12 @@ class BitlabReferenceSelectionTests(unittest.TestCase):
             {"species_raw": "Felina", "sex_raw": "F", "species_sex": "gata", "patient_age": "7 Meses"},
         )
 
-        self.assertEqual(rows[0]["valor"], "44")
+        self.assertEqual(rows[0]["valor"], "44%")
         self.assertEqual(rows[0]["referencia"], "35 a 75")
+        self.assertEqual(rows[0]["components"][0]["valor"], "44%")
+        self.assertEqual(rows[0]["components"][0]["referencia"], "35 a 75")
+        self.assertEqual(rows[0]["components"][1]["valor"], "3608/mm3")
+        self.assertEqual(rows[0]["components"][1]["referencia"], "n/d")
 
     def test_bitlab_hemograma_prefers_first_range_when_row_has_percent_and_absolute_values(self):
         html = """
@@ -381,8 +386,11 @@ class BitlabReferenceSelectionTests(unittest.TestCase):
             {"species_raw": "Canina", "sex_raw": "F", "species_sex": "cadela", "patient_age": "5 Anos"},
         )
 
-        self.assertEqual(rows[0]["valor"], "61")
+        self.assertEqual(rows[0]["valor"], "61%")
         self.assertEqual(rows[0]["referencia"], "60 a 77")
+        self.assertEqual(rows[0]["components"][1]["valor"], "12261/mm3")
+        self.assertEqual(rows[0]["components"][1]["referencia"], "3.000 a 11.500")
+        self.assertEqual(rows[0]["alerta"], "yellow")
 
     def test_bitlab_hemograma_selects_age_range_when_single_value_has_adult_and_puppy_columns(self):
         html = """
@@ -404,6 +412,27 @@ class BitlabReferenceSelectionTests(unittest.TestCase):
         )
 
         self.assertEqual(rows[0]["referencia"], "8.500 a 16.000mm3")
+
+    def test_bitlab_hemograma_defaults_missing_age_to_adult_range(self):
+        html = """
+        <html><body>
+          <div style="left:22px;top:208px"><b>LEUCOGRAMA</b></div>
+          <div style="left:484px;top:224px">Adultos</div>
+          <div style="left:610px;top:224px">Filhotes</div>
+          <div style="left:22px;top:240px">Leucocitos por mm3.........:</div>
+          <div style="left:283px;top:240px"><b>20.100</b></div>
+          <div style="left:466px;top:240px">6.000 a 17.000</div>
+          <div style="left:565px;top:240px">mm3</div>
+          <div style="left:601px;top:240px">8.500 a 16.000mm3</div>
+        </body></html>
+        """.encode("latin-1")
+
+        rows = BitlabConnector.parse_resultado(
+            zlib.compress(html),
+            {"species_raw": "Canina", "sex_raw": "F", "species_sex": "cadela", "patient_age": "n/e"},
+        )
+
+        self.assertEqual(rows[0]["referencia"], "6.000 a 17.000")
 
 
 class StatePresentationTests(unittest.TestCase):
@@ -436,6 +465,124 @@ class StatePresentationTests(unittest.TestCase):
             self.assertEqual(groups[0]["time_display"], "16:55")
             self.assertEqual(groups[0]["last_release_display"], "01/04 12:30")
             self.assertEqual(groups[0]["liberado_em_iso"], "2026-04-01T12:30:00")
+        finally:
+            state.snapshots = original_snapshots
+            state._config = original_config
+
+    def test_get_exames_exposes_patient_age_or_nd(self):
+        original_snapshots = state.snapshots
+        original_config = state._config
+        try:
+            state._config = {
+                "labs": [{"id": "bitlab", "name": "Bioanálises"}],
+                "notifiers": [],
+                "interval_minutes": 5,
+            }
+            state.snapshots = {
+                "bitlab": {
+                    "REQ-1": {
+                        "label": "Bidu - Tutor",
+                        "data": "2026-04-01",
+                        "patient_age": "7 Meses",
+                        "itens": {
+                            "I1": {"nome": "Hemograma", "status": "Pronto"},
+                        },
+                    },
+                    "REQ-2": {
+                        "label": "Mia - Tutor",
+                        "data": "2026-04-01",
+                        "itens": {
+                            "I1": {"nome": "TGP", "status": "Pronto"},
+                        },
+                    },
+                }
+            }
+
+            groups = state.get_exames()
+            mapped = {group["record_id"]: group for group in groups}
+
+            self.assertEqual(mapped["REQ-1"]["patient_age_display"], "7 meses")
+            self.assertEqual(mapped["REQ-2"]["patient_age_display"], "n/d")
+        finally:
+            state.snapshots = original_snapshots
+            state._config = original_config
+
+
+class ResultTemplateRenderingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(web_app.app)
+
+    def test_partial_resultado_renders_compound_rows(self):
+        original_snapshots = state.snapshots
+        try:
+            state.snapshots = {
+                "bitlab": {
+                    "REQ-1": {
+                        "label": "Bidu - Tutor",
+                        "data": "2026-04-01",
+                        "itens": {
+                            "I1": {
+                                "nome": "Hemograma",
+                                "status": "Pronto",
+                                "item_id": "item-1",
+                                "resultado": [
+                                    {
+                                        "nome": "Segmentados",
+                                        "valor": "44%",
+                                        "referencia": "35 a 75",
+                                        "alerta": "yellow",
+                                        "components": [
+                                            {"valor": "44%", "referencia": "35 a 75", "alerta": None},
+                                            {"valor": "3608/mm3", "referencia": "n/d", "alerta": "yellow"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        },
+                    }
+                }
+            }
+
+            response = self.client.get("/labmonitor/partials/resultado/item-1")
+
+            self.assertEqual(response.status_code, 200)
+            body = response.text
+            self.assertIn("44%", body)
+            self.assertIn("3608/mm", body)
+            self.assertIn("35 a 75", body)
+            self.assertIn("n/d", body)
+        finally:
+            state.snapshots = original_snapshots
+
+    def test_exames_partial_renders_patient_age_meta(self):
+        original_snapshots = state.snapshots
+        original_config = state._config
+        try:
+            state._config = {
+                "labs": [{"id": "bitlab", "name": "Bioanálises", "enabled": True}],
+                "notifiers": [],
+                "interval_minutes": 5,
+            }
+            state.snapshots = {
+                "bitlab": {
+                    "REQ-1": {
+                        "label": "Bidu - Tutor",
+                        "data": "2026-04-01",
+                        "patient_age": "",
+                        "itens": {
+                            "I1": {"nome": "Hemograma", "status": "Pronto", "item_id": "item-1"},
+                        },
+                    }
+                }
+            }
+
+            response = self.client.get("/labmonitor/partials/exames")
+
+            self.assertEqual(response.status_code, 200)
+            body = response.text
+            self.assertIn("IDADE", body)
+            self.assertIn("n/d", body)
         finally:
             state.snapshots = original_snapshots
             state._config = original_config

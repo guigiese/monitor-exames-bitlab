@@ -1,3 +1,5 @@
+{% import "partials/result_rows_macro.html" as result_macros %}
+
 {% macro status_tone(status) -%}
   {{ {
     "Pronto": "ready",
@@ -191,13 +193,13 @@
     </summary>
     <div class="pb-item-result-body">
       {% if item.results %}
-        {{ result_rows(item.results, table_width) }}
+        {{ result_macros.result_rows(item.results, table_width) }}
       {% elif item.report_text %}
-        {{ report_text_block(item) }}
+        {{ result_macros.report_text_block(item) }}
       {% elif can_fetch_result %}
         <p class="pb-item-result-empty">Resultado será carregado ao expandir.</p>
       {% else %}
-        {{ report_text_block(item) }}
+        {{ result_macros.report_text_block(item) }}
       {% endif %}
     </div>
   </details>
@@ -355,6 +357,10 @@
         <span class="pb-protocol-link is-static is-expanded">{{ g.last_release_display }}</span>
       </span>
       {% endif %}
+      <span class="pb-expanded-meta__pair">
+        <span class="pb-expanded-meta__label">IDADE</span>
+        <span class="pb-protocol-link is-static is-expanded">{{ g.patient_age_display }}</span>
+      </span>
       {% if g.species_sex or g.breed %}
       <span class="pb-expanded-meta__pair">
         <span class="pb-expanded-meta__label">PACIENTE</span>

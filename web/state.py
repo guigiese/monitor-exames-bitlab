@@ -157,6 +157,16 @@ def _parse_datetime(raw: str | None) -> datetime | None:
     return None
 
 
+def _format_patient_age(raw: str | None) -> str:
+    text = " ".join((raw or "").strip().split())
+    if not text:
+        return "n/d"
+    norm = _strip_accents(text.lower())
+    if norm in {"n/e", "ne", "n/d", "nd", "nao informado", "nao especificado"}:
+        return "n/d"
+    return text.lower()
+
+
 def _iso_sort_key(raw: str | None) -> str:
     dt = _parse_datetime(raw)
     return dt.isoformat() if dt else (raw or "")
@@ -326,9 +336,11 @@ class AppState:
                     or record.get("especie_sexo")
                     or record.get("speciesSex")
                 )
+                patient_age = record.get("patient_age") or record.get("idade") or ""
+                patient_age_display = _format_patient_age(patient_age)
 
                 search_blob = " ".join(
-                    part for part in [paciente, patient_name, tutor_name, species_sex, breed] if part
+                    part for part in [paciente, patient_name, tutor_name, species_sex, breed, patient_age_display] if part
                 )
                 if not _search_match(q, search_blob):
                     continue
@@ -389,6 +401,8 @@ class AppState:
                     "tutor_name":      tutor_name,
                     "species_sex":     species_sex,
                     "breed":           breed,
+                    "patient_age":     patient_age,
+                    "patient_age_display": patient_age_display,
                     "data":            data_fmt,
                     "data_raw":        _iso_sort_key(received_at_raw) or record["data"],
                     "date_display":    _format_date(received_at_raw or record["data"]),
