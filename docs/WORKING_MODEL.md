@@ -42,68 +42,45 @@ Decisões estruturais sobre o workspace que não devem ser re-questionadas sem u
 
 ## 1. Jira Structure
 
-Há atualmente 4 projetos Jira. Consolidação para PB + PBINC está planejada (PBCORE-64).
+Consolidação concluída (PBVET-28). Estrutura atual: 2 projetos Jira ativos.
 
 Projetos ativos:
-- `PBEXM`: módulo Lab Monitor
-- `PBCORE`: plataforma, governança, docs, segurança, infra, shared capabilities
-- `PBFIN`: módulo Financeiro
+- `PBVET`: projeto unificado — Lab Monitor, plataforma/infra, Financeiro e demais módulos de entrega
 - `PBINC`: incubadora para módulos futuros (CRM, automação)
 
-Workflow de entrega (PBEXM, PBCORE, PBFIN):
-`Backlog → Descoberta → Refinamento → Pronto pra dev → Em andamento → Em revisão → Concluído`
+Projetos legados (histórico de issues Concluídas permanece):
+- `PBEXM`, `PBCORE`, `PBFIN`: issues ativas migradas para PBVET; mantidos como arquivo histórico
+
+Workflow de entrega (PBVET):
+`Backlog → Descoberta → Pronto pra dev → Em andamento → Em revisão → Concluído`
 
 Workflow de incubação (PBINC):
 `Backlog → Descoberta → Validação → Pronto pra incubar → Em incubação → Graduado`
 
-Nota: Jira não aceita chaves com hífen interno (`PB-EXM`), por isso as chaves reais são `PBEXM`, `PBCORE`, etc.
-
 Use them like this:
 
-- `PBEXM` for exam product work and exam-specific hardening
-- `PBCORE` for cross-cutting work and platform-level decisions
+- `PBVET` for all active delivery work: Lab Monitor, platform/infra, Financeiro
 - `PBINC` for future-module discovery until a module deserves its own project
 
 Cross-project board:
-- `PB Triage` is the transversal board for cards with ambiguous scope or re-home decisions
-- it is a board only, not a fourth project
-- cards on that board must still belong to one real project: `PBEXM`, `PBCORE`, or `PBINC`
+- `PB Triage` is the transversal board for scope-ambiguous cards
+- it is a board only, not a project
+- cards on that board must still belong to one real project: `PBVET` or `PBINC`
 
-## 1A. PBCORE Scope Policy
+## 1A. PBVET Scope Policy
 
-`PBCORE` exists for governance plus shared platform capabilities.
-It is not docs-only, but it is also not a generic overflow bucket.
+`PBVET` is the unified delivery project for all active platform work.
 
-Work that belongs in `PBCORE`:
-- Jira operating model, workflow rules, DoR, DoD, and project governance
-- AI onboarding, working agreements, documentation standards, and execution guardrails
-- naming, repository organization, and platform-level operating conventions
-- auth, secrets, persistence, infra, observability, and other technical capabilities meant to serve more than one module
-- shared contracts, shared tooling, or platform rules that sit above a single module
-- discovery of platform capabilities before they become implementation
+Use `PBVET` for:
+- Lab Monitor product work
+- platform/infra, governance, auth, persistence, observability
+- Financeiro module
+- any cross-cutting shared capability or platform-level decision
 
-Work that does not belong in `PBCORE`:
-- product behavior, screens, rules, data, or delivery work that belongs only to the exam module
-- active Lab Monitor implementation or deploy-line work when the scope is local to that module
-- discovery of future business modules such as CRM, Financeiro, or Automacao de Atendimento
-
-Quick routing rule:
-- if the work affects one active module only, prefer that module project
-- if the work explores a future business module, use `PBINC`
-- if the work defines a reusable rule, platform guardrail, or shared capability, use `PBCORE`
-
-Ambiguous scope rule:
-- if the scope is still unclear, discovery may begin in `PBCORE`
-- once discovery shows the downstream work is module-local, the implementation cards should move to the module project instead of staying in `PBCORE`
-
-Triage board rule:
-- use label `scope-ambiguous` for cards that still need a home decision
-- use label `needs-rehome` for cards whose right home is known, but whose history is still being preserved in the old project
-- cards with one of those labels may live on the `PB Triage` board while the routing decision is active
-- no such card should enter `Pronto pra dev` without a clear destination project
+Use `PBINC` for:
+- future-module discovery (CRM, automação de atendimento) until a module is ready for active delivery
 
 Current incubated module lines:
-- Financeiro
 - CRM
 - Automacao de Atendimento
 
@@ -134,7 +111,7 @@ Use them this way:
 
 ## 4. Jira Status Model
 
-### Delivery workflow — PBEXM e PBCORE
+### Delivery workflow — PBVET
 
 ```
 Backlog → Descoberta → Pronto pra dev → Em andamento → Em revisão → Concluído
@@ -166,12 +143,13 @@ Backlog → Descoberta → Validação → Pronto pra incubar → Em incubação
 | `Graduado` | Maduro para sair da incubadora e virar frente de entrega real | — |
 | `Descartado` | Fechado intencionalmente por fit, prioridade ou viabilidade | — |
 
-When a new PB project is created, use the helper below:
+When a new PB-family project is created, use the helper below:
 - `powershell -File scripts/apply_pb_jira_workflow.ps1 -ProjectKey <KEY>`
+- Requires a **next-gen** (team-managed) project. Classic-style projects are incompatible.
 
 Profile behavior:
 - `PBINC` uses the incubator workflow automatically
-- any other PB project uses the delivery workflow automatically
+- `PBVET` and any other delivery project uses the delivery workflow automatically
 - if needed, force it with `-Profile delivery` or `-Profile incubator`
 
 If a temporary mismatch appears before the workflow is applied, represent the missing stages

@@ -15,7 +15,7 @@ Consulte os arquivos referenciados abaixo apenas se a tarefa exigir.
 | **Plataforma** | PinkBlue Vet — o ecossistema completo |
 | **Módulo** | Capacidade de produto: Lab Monitor, Financeiro, CRM |
 | **Repositório** | O monorepo GitHub (único): guigiese/pinkblue-vet |
-| **Projeto Jira** | Escopo de rastreamento: PBCORE, PBEXM, PBFIN, PBINC (consolidação → PB pendente) |
+| **Projeto Jira** | Escopo de rastreamento: PBVET (unificado), PBINC (incubadora) |
 | **Serviço** | Container deployado no Railway |
 | **Sessão** | Unidade de trabalho: branch + card Jira + PR |
 
@@ -54,7 +54,7 @@ Antes de tocar qualquer arquivo:
 
 **1. Busque cards existentes**
 Jira: https://guigiese.atlassian.net | Credenciais: `~/.codex/jira-auth.json`
-Projetos: PBEXM (Lab Monitor) · PBCORE (plataforma/infra) · PBFIN (Financeiro) · PBINC (incubadora)
+Projetos: PBVET (projeto unificado: Lab Monitor + plataforma/infra + Financeiro) · PBINC (incubadora)
 Busque palavras-chave do problema descrito pelo usuário.
 
 **2. Avalie os resultados**
