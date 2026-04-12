@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, date
 from typing import Any
 
-from sqlalchemy import MetaData, Table, Column, Integer, Text, Real, text
+from sqlalchemy import MetaData, Table, Column, Integer, Text, Float as Real, text
 
 log = logging.getLogger(__name__)
 

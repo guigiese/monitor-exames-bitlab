@@ -150,7 +150,14 @@ class PlatformStore:
         """
         with self._connect() as conn:
             conn.executescript(schema)
-            conn.commit()
+            # Coluna adicionada pelo módulo Plantão — idempotente
+            try:
+                conn.execute(
+                    "ALTER TABLE users ADD COLUMN gestor_plantao INTEGER NOT NULL DEFAULT 0"
+                )
+                conn.commit()
+            except Exception:
+                pass  # coluna já existe
 
     def bootstrap_legacy_runtime(self) -> None:
         if self.load_runtime_config() is None and CONFIG_FILE.exists():
@@ -346,6 +353,7 @@ class PlatformStore:
     def _normalize_user(self, row: sqlite3.Row | None) -> dict | None:
         if not row:
             return None
+        keys = row.keys() if hasattr(row, "keys") else []
         return {
             "id": row["id"],
             "email": row["email"],
@@ -354,6 +362,7 @@ class PlatformStore:
             "force_password_change": bool(row["force_password_change"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "gestor_plantao": bool(row["gestor_plantao"]) if "gestor_plantao" in keys else False,
         }
 
     def list_users(self) -> list[dict]:

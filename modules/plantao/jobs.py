@@ -144,7 +144,7 @@ def limpar_notificacoes_antigas(engine: Any, dias: int = 30) -> int:
                 text(
                     "DELETE FROM plantao_notificacoes"
                     " WHERE lida = 1"
-                    "   AND criada_em < date(:hoje, '-' || :dias || ' days')"
+                    "   AND criado_em < date(:hoje, '-' || :dias || ' days')"
                 ),
                 {"hoje": _hoje(), "dias": dias},
             )

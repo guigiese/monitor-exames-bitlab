@@ -1118,18 +1118,17 @@ def _exige_plantonista(request: Request):
 
 def _exige_gestor(request: Request):
     from pb_platform.auth import attach_user_to_request
+    from pb_platform.storage import store
 
     user = attach_user_to_request(request)
     if not user:
         return RedirectResponse("/login?next=/plantao/admin", status_code=303)
-    with _engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT gestor_plantao FROM users WHERE id = :id"),
-            {"id": user["id"]},
-        ).mappings().first()
-    if not row or not row["gestor_plantao"]:
+    # gestor_plantao está na plataforma (store SQLite), não no plantão engine
+    full_user = store.get_user_by_id(user["id"])
+    if not full_user or not full_user.get("gestor_plantao"):
         return HTMLResponse("<h1>403 - Acesso restrito a gestores de plantao.</h1>", status_code=403)
-    return user
+    request.state.gestor = full_user
+    return full_user
 
 
 def _validar_csrf_ou_403(request: Request, perfil: dict) -> None:
