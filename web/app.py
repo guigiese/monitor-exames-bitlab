@@ -8,10 +8,14 @@ from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import create_engine
 
 from core import run_historical_backfill_until_complete, run_monitor_loop
 from labs import CONNECTORS
 from labs.bitlab import BitlabConnector
+from modules.plantao.schema import init_schema
+from modules.plantao.router import make_router as make_plantao_router
+from modules.plantao.jobs import run_plantao_jobs
 from notifiers import NOTIFIERS
 from notifiers.telegram import get_users, remove_user
 from notifiers.telegram_polling import WEBHOOK_SECRET_PATH, handle_update, register_webhook
@@ -40,6 +44,13 @@ from web.ops_map import OPS_MAP_DIR, get_ops_map_runtime
 from web.state import state
 from web.text_reports import build_report_sections
 
+# ── Módulo Plantão — engine e inicialização ───────────────────────────────────
+_DB_URL = os.environ.get("DATABASE_URL", "sqlite:///./data/pinkblue.db")
+# SQLAlchemy exige postgresql+psycopg2 para PG; Railway expõe postgres:// legado
+if _DB_URL.startswith("postgres://"):
+    _DB_URL = _DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+plantao_engine = create_engine(_DB_URL, pool_pre_ping=True)
+
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -50,9 +61,16 @@ EXAMES_PAGE_SIZE = 20
 
 @asynccontextmanager
 async def lifespan(app):
+    # Plataforma principal
     monitor_thread = threading.Thread(target=run_monitor_loop, args=(state,), daemon=True)
     monitor_thread.start()
     register_webhook(APP_URL)
+    # Módulo Plantão
+    init_schema(plantao_engine)
+    plantao_jobs_thread = threading.Thread(
+        target=run_plantao_jobs, args=(plantao_engine,), daemon=True
+    )
+    plantao_jobs_thread.start()
     yield
 
 
@@ -61,9 +79,17 @@ router = APIRouter(prefix="/labmonitor")
 app.mount("/ops-map-static", StaticFiles(directory=str(OPS_MAP_DIR)), name="ops_map_static")
 app.mount("/sandboxes/cards-static", StaticFiles(directory=str(CARD_SANDBOX_DIR)), name="cards_sandbox_static")
 
+# ── Módulo Plantão ────────────────────────────────────────────────────────────
+# Rotas /plantao/* — auth isolado (cookie plantao_session), excluídas do
+# platform_auth_middleware abaixo.
+app.include_router(make_plantao_router(plantao_engine))
+
 
 @app.middleware("http")
 async def platform_auth_middleware(request: Request, call_next):
+    # O módulo Plantão gerencia sua própria autenticação — bypass do middleware
+    if request.url.path.startswith("/plantao"):
+        return await call_next(request)
     if auth_bypassed(request):
         request.state.user = {"email": "tests@pinkbluevet.local", "role": "admin"}
         return await call_next(request)
