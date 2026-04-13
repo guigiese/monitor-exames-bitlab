@@ -126,5 +126,101 @@ class NotificationPolicyTests(unittest.TestCase):
         self.assertEqual(external, [])
 
 
+    def test_inconsistente_item_fires_completed_notification(self):
+        """Items the lab marks Pronto but whose result couldn't be parsed are
+        stored as Inconsistente (lab_status=Pronto). A completed notification
+        must still be sent so the vet knows the exam is ready at the lab."""
+        anterior = {
+            "REQ-1": {
+                "label": "Polenta - Fabiana",
+                "data": "2026-04-13",
+                "itens": {
+                    "I1": {"nome": "Hemograma", "status": "Em Andamento"},
+                },
+            }
+        }
+        atual = {
+            "REQ-1": {
+                "label": "Polenta - Fabiana",
+                "data": "2026-04-13",
+                "itens": {
+                    "I1": {
+                        "nome": "Hemograma",
+                        "status": "Inconsistente",
+                        "lab_status": "Pronto",
+                    },
+                },
+            }
+        }
+
+        internal, external = core.build_notification_plan("bitlab", "BitLab", anterior, atual)
+
+        self.assertEqual(len(external), 1)
+        self.assertEqual(external[0]["kind"], "completed")
+
+    def test_inconsistente_item_does_not_refire_on_subsequent_cycles(self):
+        """Once an item is already Inconsistente (lab Pronto, no result), the
+        next cycle must NOT re-send the completed notification."""
+        already_inconsistente = {
+            "REQ-1": {
+                "label": "Polenta - Fabiana",
+                "data": "2026-04-13",
+                "itens": {
+                    "I1": {
+                        "nome": "Hemograma",
+                        "status": "Inconsistente",
+                        "lab_status": "Pronto",
+                    },
+                },
+            }
+        }
+
+        internal, external = core.build_notification_plan(
+            "bitlab", "BitLab", already_inconsistente, already_inconsistente
+        )
+
+        # s_old == s_new == Inconsistente → no change detected → no events
+        self.assertEqual(external, [])
+
+    def test_inconsistente_item_does_not_generate_status_update(self):
+        """An Inconsistente item must not generate a status_update event
+        (that event is disabled by default and would only create noise)."""
+        anterior = {
+            "REQ-1": {
+                "label": "Polenta - Fabiana",
+                "data": "2026-04-13",
+                "itens": {
+                    "I1": {"nome": "Hemograma", "status": "Em Andamento"},
+                },
+            }
+        }
+        atual = {
+            "REQ-1": {
+                "label": "Polenta - Fabiana",
+                "data": "2026-04-13",
+                "itens": {
+                    "I1": {
+                        "nome": "Hemograma",
+                        "status": "Inconsistente",
+                        "lab_status": "Pronto",
+                    },
+                },
+            }
+        }
+        settings = {
+            "events": {
+                "received": {"enabled": True, "template": "RX {record_id}"},
+                "completed": {"enabled": True, "template": "CX {record_id}"},
+                "status_update": {"enabled": True, "template": "UPD {record_id}"},
+            }
+        }
+
+        internal, external = core.build_notification_plan("bitlab", "BitLab", anterior, atual, settings)
+
+        kinds = [e["kind"] for e in external]
+        self.assertNotIn("status_update", kinds)
+        self.assertIn("completed", kinds)
+
+
 if __name__ == "__main__":
     unittest.main()
