@@ -383,7 +383,34 @@ def make_router(engine: Any) -> APIRouter:
 
     @router.get("/sobreaviso", response_class=HTMLResponse)
     async def sobreaviso_redirect(request: Request):
-        return RedirectResponse("/plantao/agenda", status_code=302)
+        qs = request.url.query
+        target = "/plantao/disponibilidade" + (f"?{qs}" if qs else "")
+        return RedirectResponse(target, status_code=302)
+
+    @router.get("/disponibilidade", response_class=HTMLResponse)
+    async def disponibilidade_page(request: Request):
+        from .queries import listar_sobreaviso_por_perfil, listar_datas_por_mes
+        import calendar as cal_mod
+        from datetime import date as dt_date
+        _exige_plantonista(request)
+        perfil = _get_perfil(request)
+        hoje = dt_date.today()
+        ano, mes = hoje.year, hoje.month
+        sobreavisos_abertos = listar_datas_por_mes(engine, ano, mes, None, tipo="sobreaviso", status="publicado")
+        minhas_adesoes = listar_sobreaviso_por_perfil(engine, perfil["id"])
+        csrf_token = _csrf_token(request)
+        erro = request.query_params.get("erro")
+        ok = request.query_params.get("ok")
+        return templates.TemplateResponse(
+            "plantao_sobreaviso.html",
+            {
+                "request": request, "csrf_token": csrf_token,
+                "perfil": perfil, "erro": erro, "ok": ok,
+                "sobreavisos_abertos": sobreavisos_abertos,
+                "minhas_adesoes": minhas_adesoes,
+                **_base_ctx(request),
+            },
+        )
 
     @router.get("/escalas", response_class=HTMLResponse)
     async def escalas_page(

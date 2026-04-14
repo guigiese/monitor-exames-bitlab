@@ -276,6 +276,17 @@ async def rejeitar_usuario(request: Request, user_id: int):
 
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
+    platform_user = getattr(request.state, "user", None)
+    if platform_user:
+        perms = user_permissions(platform_user)
+        has_labmonitor = perms.get("labmonitor_access") or perms.get("manage_labmonitor")
+        has_plantao = perms.get("plantao_access") or perms.get("manage_plantao")
+        modules_count = sum([bool(has_labmonitor), bool(has_plantao)])
+        if modules_count == 1:
+            if has_plantao:
+                return RedirectResponse(url="/plantao/", status_code=302)
+            if has_labmonitor:
+                return RedirectResponse(url="/labmonitor", status_code=302)
     return _render(request, "index.html", users=store.list_users())
 
 

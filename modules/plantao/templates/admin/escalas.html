@@ -178,7 +178,7 @@
         <select id="campo-tipo" name="tipo"
                 class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-rose-400 focus:outline-none">
           <option value="presencial">Presencial</option>
-          <option value="sobreaviso">Sobreaviso</option>
+          <option value="sobreaviso">Disponibilidade</option>
         </select>
       </div>
       <div>
@@ -212,7 +212,7 @@
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Vagas Aux</label>
-        <input id="campo-vagas-aux" type="number" min="0" value="0"
+        <input id="campo-vagas-aux" type="number" min="0" value="1"
                class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-rose-400 focus:outline-none">
       </div>
     </div>
@@ -280,7 +280,7 @@
 
   {# Botão salvar #}
   <div class="px-6 py-4 mt-auto border-t border-gray-100 shrink-0">
-    <button onclick="salvarEscala()"
+    <button id="btn-criar-escala" onclick="salvarEscala()"
             class="w-full rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-3">
       Criar Escala
     </button>
@@ -329,7 +329,7 @@ function setModo(modo) {
   document.getElementById('campos-lote').classList.toggle('hidden', modo !== 'lote');
   document.getElementById('tab-unica').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'unica' ? 'bg-rose-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`;
   document.getElementById('tab-lote').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'lote' ? 'bg-rose-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`;
-  document.querySelector('#painel-escala .rounded-2xl button:first-child').textContent = modo === 'unica' ? 'Criar Escala' : 'Criar ' + (contarDatasLote() || '') + ' Escalas';
+  document.getElementById('btn-criar-escala').textContent = modo === 'unica' ? 'Criar Escala' : 'Criar ' + (contarDatasLote() || '') + ' Escalas';
 }
 
 function abrirPainelEscala() {

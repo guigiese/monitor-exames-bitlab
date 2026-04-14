@@ -412,8 +412,9 @@ class PlatformStore:
                 for perm, val in profile["permissions"].items():
                     resolved[perm] = bool(val)
         result = {permission: bool(resolved.get(permission, False)) for permission in ALL_PERMISSIONS}
-        # manage_plantao implica todas as sub-permissões granulares do módulo Plantão
+        # manage_plantao implica plantao_access e todas as sub-permissões granulares do módulo Plantão
         if result.get("manage_plantao"):
+            result["plantao_access"] = True
             for sub in ("plantao_gerir_escalas", "plantao_aprovar_candidaturas", "plantao_aprovar_cadastros", "plantao_ver_relatorios"):
                 result[sub] = True
         return result
