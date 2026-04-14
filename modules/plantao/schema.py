@@ -374,8 +374,6 @@ CREATE TABLE IF NOT EXISTS plantao_audit_log (
 CREATE INDEX IF NOT EXISTS idx_plantao_audit_acao ON plantao_audit_log(acao);
 CREATE INDEX IF NOT EXISTS idx_plantao_audit_entidade ON plantao_audit_log(entidade, entidade_id);
 CREATE INDEX IF NOT EXISTS idx_plantao_audit_criado ON plantao_audit_log(criado_em);
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS gestor_plantao INTEGER NOT NULL DEFAULT 0;
 """
 
 # SQLite-compatible DDL (sem SERIAL, sem BIGSERIAL, sem partial indexes, sem ALTER ADD IF NOT EXISTS)
@@ -515,6 +513,31 @@ FROM users
 WHERE role IN ('veterinario', 'auxiliar')
 """
 
+_VIEW_PLANTAO_PERFIS_PG = """
+CREATE OR REPLACE VIEW plantao_perfis AS
+SELECT
+    id,
+    nome,
+    email,
+    password_hash AS senha_hash,
+    role          AS tipo,
+    crmv,
+    ''            AS especialidade,
+    telefone,
+    status,
+    NULL::TEXT    AS motivo_rejeicao,
+    tentativas_login,
+    bloqueado_ate,
+    NULL::TEXT    AS reset_token,
+    NULL::TEXT    AS reset_token_expira,
+    created_at    AS criado_em,
+    updated_at    AS alterado_em,
+    NULL::TEXT    AS aprovado_em,
+    NULL::INTEGER AS aprovado_por
+FROM users
+WHERE role IN ('veterinario', 'auxiliar')
+"""
+
 
 def _migrate_remove_old_plantao_auth(conn) -> None:
     """
@@ -560,8 +583,10 @@ def init_schema(engine) -> None:
                         log.error("Erro ao criar schema plantão: %s\n%s", stmt[:80], e)
                         raise
 
-        # Cria a VIEW plantao_perfis (SQLite) após as tabelas do DDL
-        if not is_pg:
+        # Cria a VIEW plantao_perfis após as tabelas do DDL
+        if is_pg:
+            conn.execute(text(_VIEW_PLANTAO_PERFIS_PG))
+        else:
             try:
                 conn.execute(text(_VIEW_PLANTAO_PERFIS_SQLITE))
             except Exception as e:

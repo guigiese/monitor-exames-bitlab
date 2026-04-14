@@ -1,121 +1,161 @@
-<!DOCTYPE html>
-<html lang="pt-BR" class="h-full">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Plantão{% endblock %} — Pink Blue Vet</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <style>
-    /* Ensure body takes full height on mobile */
-    body { min-height: 100dvh; }
-    /* Safe area insets for iOS */
-    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 1rem); }
-  </style>
-  {% block head %}{% endblock %}
-</head>
-<body class="h-full bg-gray-50 text-gray-900 flex flex-col">
+{% extends "platform_base.html" %}
 
-  {# ── Top bar ── #}
-  <header class="bg-pink-700 text-white shadow-sm sticky top-0 z-40">
-    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="/plantao/escalas" class="flex items-center gap-2 font-semibold text-white no-underline">
-        <span class="text-lg">🐾</span>
-        <span class="hidden sm:inline">Pink Blue Vet</span>
-        <span class="text-pink-200 font-normal">| Plantão</span>
-      </a>
+{# ── Header overrides ─────────────────────────────────────────────────────── #}
+{% block home_href %}/plantao/{% endblock %}
+{% block header_icon %}🐾{% endblock %}
+{% block shell_caption %}Módulo Plantão{% endblock %}
 
-      {# Notificações badge (HTMX polling) #}
-      <div class="flex items-center gap-3">
-        <a href="/plantao/notificacoes" class="relative text-white hover:text-pink-200 transition-colors">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-          </svg>
-          <span id="badge-notif"
-                hx-get="/plantao/partials/badge-notificacoes"
-                hx-trigger="load, every 60s"
-                hx-target="this"
-                hx-swap="outerHTML"
-                class="absolute -top-1 -right-1">
-          </span>
-        </a>
+{% block header_module_link %}
+<a href="/"
+   class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
+  Plataforma
+</a>
+{% endblock %}
 
-        {# Hamburger menu trigger #}
-        <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
-                class="text-white hover:text-pink-200 transition-colors">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M4 6h16M4 12h16M4 18h16"/>
-          </svg>
-        </button>
-      </div>
-    </div>
+{# ── Sidebar unificada — estrutura idêntica em todas as páginas do módulo ── #}
+{% block sidebar %}
+<nav class="flex flex-col gap-1 text-sm">
+  {% set cur = request.url.path %}
 
-    {# Mobile menu #}
-    <nav id="mobile-menu" class="hidden bg-pink-800 border-t border-pink-600">
-      <div class="max-w-2xl mx-auto px-4 py-2 flex flex-col gap-1">
-        <a href="/plantao/escalas" class="block py-2 px-3 text-pink-100 hover:bg-pink-700 rounded-md text-sm">
-          📅 Escalas abertas
-        </a>
-        <a href="/plantao/meus-turnos" class="block py-2 px-3 text-pink-100 hover:bg-pink-700 rounded-md text-sm">
-          📋 Meus turnos
-        </a>
-        <a href="/plantao/trocas" class="block py-2 px-3 text-pink-100 hover:bg-pink-700 rounded-md text-sm">
-          🔄 Trocas / Substituições
-        </a>
-        <a href="/plantao/sobreaviso" class="block py-2 px-3 text-pink-100 hover:bg-pink-700 rounded-md text-sm">
-          🔔 Sobreaviso
-        </a>
-        <a href="/plantao/perfil" class="block py-2 px-3 text-pink-100 hover:bg-pink-700 rounded-md text-sm">
-          👤 Meu perfil
-        </a>
-        <hr class="border-pink-600 my-1"/>
-        <a href="/logout" class="block py-2 px-3 text-pink-300 hover:bg-pink-700 rounded-md text-sm">
-          ↩ Sair
-        </a>
-      </div>
-    </nav>
-  </header>
+  {# ── Início ─────────────────────────────────────────────────────────────── #}
+  <a href="/plantao/"
+     class="rounded-2xl px-3 py-2 font-semibold
+            {% if cur == '/plantao/' or cur == '/plantao' %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Início
+  </a>
 
-  {# ── Conteúdo principal ── #}
-  <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6">
-    {% block content %}{% endblock %}
-  </main>
+  {# ── PLANTONISTA ─────────────────────────────────────────────────────────── #}
+  {% if platform_permissions.plantao_access %}
+  <div class="mt-3 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Plantonista</div>
 
-  {# ── Bottom nav (mobile) ── #}
-  <nav class="bg-white border-t border-gray-200 pb-safe fixed bottom-0 inset-x-0 z-30 sm:hidden">
-    <div class="flex justify-around py-2">
-      <a href="/plantao/escalas" class="flex flex-col items-center gap-0.5 text-xs text-gray-500 hover:text-pink-700 px-3 py-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-        </svg>
-        Escalas
-      </a>
-      <a href="/plantao/meus-turnos" class="flex flex-col items-center gap-0.5 text-xs text-gray-500 hover:text-pink-700 px-3 py-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-        </svg>
-        Turnos
-      </a>
-      <a href="/plantao/trocas" class="flex flex-col items-center gap-0.5 text-xs text-gray-500 hover:text-pink-700 px-3 py-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-        </svg>
-        Trocas
-      </a>
-      <a href="/plantao/sobreaviso" class="flex flex-col items-center gap-0.5 text-xs text-gray-500 hover:text-pink-700 px-3 py-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-        </svg>
-        Sobreaviso
-      </a>
-    </div>
-  </nav>
+  <a href="/plantao/agenda"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/agenda') or cur.startswith('/plantao/escalas') or cur.startswith('/plantao/meus-turnos') or cur.startswith('/plantao/trocas') or cur.startswith('/plantao/sobreaviso') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Minha Agenda
+  </a>
 
-  {# Spacer for fixed bottom nav on mobile #}
-  <div class="h-16 sm:hidden"></div>
+  <a href="/plantao/perfil"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/perfil') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Meu perfil
+  </a>
+  {% endif %}
 
-  {% block scripts %}{% endblock %}
-</body>
-</html>
+  {# ── GESTÃO ─────────────────────────────────────────────────────────────── #}
+  {% if platform_permissions.manage_plantao or platform_permissions.plantao_gerir_escalas or platform_permissions.plantao_aprovar_candidaturas or platform_permissions.plantao_aprovar_cadastros %}
+  <div class="mt-3 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Gestão</div>
+
+  {% if platform_permissions.manage_plantao %}
+  <a href="/plantao/admin/"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur == '/plantao/admin/' or cur == '/plantao/admin' %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Dashboard
+  </a>
+  {% endif %}
+
+  {% if platform_permissions.plantao_gerir_escalas %}
+  <a href="/plantao/admin/escalas"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/escalas') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Escalas
+  </a>
+  {% endif %}
+
+  {% if platform_permissions.plantao_aprovar_candidaturas %}
+  <a href="/plantao/admin/aprovacoes"
+     class="rounded-2xl px-3 py-2 font-medium flex items-center justify-between
+            {% if cur.startswith('/plantao/admin/candidaturas') or cur.startswith('/plantao/admin/aprovacoes') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    <span>Candidaturas</span>
+    <span hx-get="/plantao/partials/badge-pendentes"
+          hx-trigger="load, every 60s"
+          hx-swap="innerHTML"></span>
+  </a>
+
+  <a href="/plantao/admin/disponibilidade"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/disponibilidade') or cur.startswith('/plantao/admin/sobreaviso') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Lista de Disponibilidade
+  </a>
+  {% endif %}
+
+  {% if platform_permissions.plantao_aprovar_cadastros %}
+  <a href="/plantao/admin/cadastros"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/cadastros') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Cadastros
+  </a>
+  {% endif %}
+  {% endif %}
+
+  {# ── CONFIGURAÇÃO ───────────────────────────────────────────────────────── #}
+  {% if platform_permissions.manage_plantao %}
+  <div class="mt-3 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Configuração</div>
+
+  <a href="/plantao/admin/locais"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/locais') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Locais
+  </a>
+
+  <a href="/plantao/admin/tarifas"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/tarifas') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Tarifas
+  </a>
+
+  <a href="/plantao/admin/feriados"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/feriados') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Feriados
+  </a>
+
+  <a href="/plantao/admin/configuracoes"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/configuracoes') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Configurações
+  </a>
+  {% endif %}
+
+  {# ── ANÁLISE ────────────────────────────────────────────────────────────── #}
+  {% if platform_permissions.manage_plantao or platform_permissions.plantao_ver_relatorios %}
+  <div class="mt-3 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Análise</div>
+
+  <a href="/plantao/admin/relatorios"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/relatorios') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Relatórios
+  </a>
+
+  <a href="/plantao/admin/audit-log"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/admin/audit-log') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Audit log
+  </a>
+  {% endif %}
+
+  {# ── Notificações ────────────────────────────────────────────────────────── #}
+  <div class="my-2 border-t border-gray-200"></div>
+  <a href="/plantao/notificacoes"
+     class="rounded-2xl px-3 py-2 font-medium
+            {% if cur.startswith('/plantao/notificacoes') %}bg-rose-50 text-rose-700
+            {% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Notificações
+  </a>
+</nav>
+{% endblock %}
+
+{% block content %}{% endblock %}

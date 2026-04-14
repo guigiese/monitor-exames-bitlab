@@ -1,39 +1,6 @@
-{% extends "platform_base.html" %}
+{% extends "plantao_base.html" %}
 
 {% block title %}Plantão · {{ platform_name }}{% endblock %}
-{% block shell_caption %}Módulo Plantão{% endblock %}
-
-{# ── Sidebar de navegação (visível em ambos os roles) ── #}
-{% block sidebar %}
-<nav class="flex flex-col gap-1 text-sm">
-  {% set cur = request.url.path %}
-  <a href="/plantao/"
-     class="rounded-2xl px-3 py-2 font-semibold {% if cur == '/plantao/' or cur == '/plantao' %}bg-rose-50 text-rose-700{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
-    Início
-  </a>
-
-  {% if is_gestor %}
-  <div class="mt-2 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Gestão</div>
-  <a href="/plantao/admin/" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Dashboard admin</a>
-  <a href="/plantao/admin/cadastros" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Cadastros</a>
-  <a href="/plantao/admin/escalas" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Escalas</a>
-  <a href="/plantao/admin/candidaturas" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Candidaturas</a>
-  <a href="/plantao/admin/sobreaviso" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Sobreaviso</a>
-  {% endif %}
-
-  {% if not is_gestor or platform_permissions.plantao_access %}
-  <div class="mt-2 mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Plantonista</div>
-  <a href="/plantao/escalas" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Escalas abertas</a>
-  <a href="/plantao/meus-turnos" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Meus turnos</a>
-  <a href="/plantao/trocas" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Trocas</a>
-  <a href="/plantao/sobreaviso" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Sobreaviso</a>
-  <a href="/plantao/perfil" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Meu perfil</a>
-  {% endif %}
-
-  <div class="my-2 border-t border-gray-200"></div>
-  <a href="/plantao/notificacoes" class="rounded-2xl px-3 py-2 font-medium text-gray-600 hover:bg-gray-50">Notificações</a>
-</nav>
-{% endblock %}
 
 {% block content %}
 {# ── Cabeçalho de boas-vindas ── #}

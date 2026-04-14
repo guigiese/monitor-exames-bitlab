@@ -8,7 +8,6 @@ from fastapi import APIRouter, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine
 
 from core import run_historical_backfill_until_complete, run_monitor_loop
 from labs import CONNECTORS
@@ -23,6 +22,7 @@ from notification_settings import NOTIFICATION_TEMPLATE_VARIABLES
 from pb_platform.auth import (
     attach_user_to_request,
     auth_bypassed,
+    default_redirect_for_user,
     forbidden_response,
     gerar_csrf_token,
     has_permission,
@@ -46,12 +46,7 @@ from web.state import state
 from web.text_reports import build_report_sections
 
 # ── Módulo Plantão — engine compartilhado com a plataforma ───────────────────
-# Por padrão usa o mesmo arquivo SQLite da plataforma (pinkbluevet.sqlite3).
-# Em produção, DATABASE_URL aponta para PostgreSQL.
-_DB_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{settings.db_path}"
-if _DB_URL.startswith("postgres://"):
-    _DB_URL = _DB_URL.replace("postgres://", "postgresql+psycopg2://", 1)
-plantao_engine = create_engine(_DB_URL, pool_pre_ping=True, connect_args={"check_same_thread": False} if "sqlite" in _DB_URL else {})
+plantao_engine = store.engine
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -59,6 +54,14 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 APP_URL = os.environ.get("APP_URL", "https://pinkblue-vet-production.up.railway.app")
 STANDARD_STATUSES = ["Pronto", "Parcial", "Em Andamento", "Analisando", "Recebido", "Cancelado"]
 EXAMES_PAGE_SIZE = 20
+
+
+def _default_module_name(path: str) -> str:
+    if path.startswith("/labmonitor"):
+        return "Lab Monitor"
+    if path.startswith("/plantao"):
+        return "Plantão"
+    return "Plataforma"
 
 
 @asynccontextmanager
@@ -82,8 +85,7 @@ app.mount("/ops-map-static", StaticFiles(directory=str(OPS_MAP_DIR)), name="ops_
 app.mount("/sandboxes/cards-static", StaticFiles(directory=str(CARD_SANDBOX_DIR)), name="cards_sandbox_static")
 
 # ── Módulo Plantão ────────────────────────────────────────────────────────────
-# Rotas /plantao/* — auth isolado (cookie plantao_session), excluídas do
-# platform_auth_middleware abaixo.
+# Rotas /plantao/* usam a mesma autenticação e o mesmo banco da plataforma.
 app.include_router(make_plantao_router(plantao_engine))
 
 
@@ -103,9 +105,9 @@ async def platform_auth_middleware(request: Request, call_next):
     if path_requires_auth(request.url.path) and not user:
         return redirect_to_login(request)
     if user and request.url.path == "/login":
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url=default_redirect_for_user(user), status_code=303)
     if user and request.url.path == "/cadastro":
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url=default_redirect_for_user(user), status_code=303)
     permission = required_permission(request.url.path, request.method)
     if permission and user and not has_permission(request, permission):
         return forbidden_response(request)
@@ -114,15 +116,17 @@ async def platform_auth_middleware(request: Request, call_next):
 
 def _render(request: Request, template: str, **ctx):
     platform_user = getattr(request.state, "user", None)
+    module_name = ctx.pop("module_name", _default_module_name(request.url.path))
     return templates.TemplateResponse(
         request,
         template,
         {
             "request": request,
             "platform_name": settings.app_name,
-            "module_name": settings.module_name,
+            "module_name": module_name,
             "platform_user": platform_user,
             "platform_permissions": user_permissions(platform_user) if platform_user else {},
+            "is_dev": settings.is_dev,
             **ctx,
         },
     )
@@ -162,7 +166,10 @@ async def login_action(
         return _render(request, "login.html", next=next or "/", error=_ERROR_MAP.get(code, "Erro ao entrar."))
 
     token = store.create_session(user["id"])
-    response = RedirectResponse(url=next or "/", status_code=303)
+    destination = next or default_redirect_for_user(user)
+    if destination == "/" and not user_permissions(user).get("platform_access"):
+        destination = default_redirect_for_user(user)
+    response = RedirectResponse(url=destination, status_code=303)
     response.set_cookie(
         settings.session_cookie_name,
         token,
@@ -214,7 +221,7 @@ async def cadastro_action(
             "nome": nome, "email": email, "role": role, "telefone": telefone,
         })
     try:
-        store.create_user_request(
+        novo_usuario = store.create_user_request(
             email=email.strip().lower(),
             password=password,
             role=role,
@@ -224,6 +231,23 @@ async def cadastro_action(
         )
     except ValueError as exc:
         return _render(request, "cadastro.html", erro=str(exc))
+    # Notificar gestores sobre novo cadastro pendente
+    try:
+        from modules.plantao.notifications import notificar_gestores
+        from modules.plantao.router import _engine as _plantao_engine
+        role_label = {"veterinario": "Veterinário", "auxiliar": "Auxiliar", "colaborador": "Colaborador"}.get(role, role)
+        nome_display = nome.strip() or email.strip().lower()
+        notificar_gestores(
+            _plantao_engine,
+            "novo_cadastro",
+            f"Novo cadastro pendente: {nome_display}",
+            f"{role_label} · {email.strip().lower()}",
+            entidade="users",
+            entidade_id=novo_usuario.get("id"),
+            permissao="plantao_aprovar_cadastros",
+        )
+    except Exception:
+        pass  # Notificação é best-effort
     return RedirectResponse("/cadastro/aguardando", status_code=303)
 
 
@@ -278,6 +302,7 @@ async def users_admin(request: Request, saved: str = ""):
         permissions=store.get_role_permissions(),
         all_permissions=_PERM_LABELS,
         role_labels=ROLE_LABELS,
+        profiles=store.list_profiles(),
         save_state=saved,
     )
 
@@ -341,6 +366,127 @@ async def update_role_permissions(
     permissions = {p: form.get(p) == "on" for p in ALL_PERMISSIONS}
     store.save_role_permissions(role, permissions)
     return RedirectResponse(url="/admin/usuarios?saved=1", status_code=303)
+
+
+# ── Perfis customizáveis ─────────────────────────────────────────────────────
+
+_PERM_LABELS_GLOBAL = {
+    "platform_access": "Home da plataforma",
+    "labmonitor_access": "Lab Monitor",
+    "manage_labmonitor": "Gerenciar Lab Monitor",
+    "ops_tools": "Ops-map e sandboxes",
+    "manage_users": "Administrar acessos",
+    "plantao_access": "Módulo Plantão",
+    "manage_plantao": "Gerenciar Plantão",
+}
+
+
+@app.get("/admin/perfis", response_class=HTMLResponse)
+async def profiles_page(request: Request, saved: str = "", erro: str = ""):
+    if not has_permission(request, "manage_users"):
+        return RedirectResponse(url="/", status_code=303)
+    from pb_platform.storage import ROLE_LABELS
+    return _render(
+        request,
+        "admin_profiles.html",
+        profiles=store.list_profiles(),
+        all_permissions=_PERM_LABELS_GLOBAL,
+        role_labels=ROLE_LABELS,
+        save_state=saved,
+        erro=erro,
+    )
+
+
+@app.post("/admin/perfis")
+async def create_profile(
+    request: Request,
+    nome: str = Form(...),
+    descricao: str = Form(""),
+    base_role: str = Form("viewer"),
+):
+    if not has_permission(request, "manage_users"):
+        return RedirectResponse(url="/", status_code=303)
+    from pb_platform.storage import ALL_PERMISSIONS
+    form = await request.form()
+    permissions = {p: form.get(f"perm_{p}") == "on" for p in ALL_PERMISSIONS}
+    try:
+        store.create_profile(nome=nome, descricao=descricao, base_role=base_role, permissions=permissions)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/perfis?erro={exc}", status_code=303)
+    return RedirectResponse(url="/admin/perfis?saved=criado", status_code=303)
+
+
+@app.post("/admin/perfis/{profile_id}")
+async def update_profile(
+    request: Request,
+    profile_id: int,
+    nome: str = Form(...),
+    descricao: str = Form(""),
+):
+    if not has_permission(request, "manage_users"):
+        return RedirectResponse(url="/", status_code=303)
+    from pb_platform.storage import ALL_PERMISSIONS
+    form = await request.form()
+    permissions = {p: form.get(f"perm_{p}") == "on" for p in ALL_PERMISSIONS}
+    try:
+        store.update_profile(profile_id, nome=nome, descricao=descricao, permissions=permissions)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/perfis?erro={exc}", status_code=303)
+    return RedirectResponse(url="/admin/perfis?saved=atualizado", status_code=303)
+
+
+@app.post("/admin/perfis/{profile_id}/delete")
+async def delete_profile(request: Request, profile_id: int):
+    if not has_permission(request, "manage_users"):
+        return RedirectResponse(url="/", status_code=303)
+    try:
+        store.delete_profile(profile_id)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/perfis?erro={exc}", status_code=303)
+    return RedirectResponse(url="/admin/perfis?saved=excluido", status_code=303)
+
+
+@app.post("/admin/usuarios/{user_id}/perfil")
+async def assign_user_profile(
+    request: Request,
+    user_id: int,
+    profile_id: str = Form(""),
+):
+    if not has_permission(request, "manage_users"):
+        return RedirectResponse(url="/", status_code=303)
+    pid = int(profile_id) if profile_id and profile_id.isdigit() else None
+    store.assign_user_profile(user_id, pid)
+    return RedirectResponse(url="/admin/usuarios?saved=1", status_code=303)
+
+
+# ── Dev user switcher (apenas em ambiente de desenvolvimento) ─────────────────
+
+if settings.is_dev:
+    @app.get("/dev/switch-user", response_class=JSONResponse)
+    async def dev_list_users(request: Request):
+        users = [
+            {"id": u["id"], "email": u["email"], "role": u["role"], "nome": u["nome"]}
+            for u in store.list_users()
+            if u.get("status") == "ativo"
+        ]
+        return JSONResponse(users)
+
+    @app.post("/dev/switch-user")
+    async def dev_switch_user(request: Request, user_id: int = Form(...)):
+        user = store.get_user_by_id(user_id)
+        if not user or user.get("status") != "ativo":
+            return RedirectResponse(url="/", status_code=303)
+        token = store.create_session(user["id"])
+        destination = default_redirect_for_user(user)
+        response = RedirectResponse(url=destination, status_code=303)
+        response.set_cookie(
+            settings.session_cookie_name,
+            token,
+            httponly=True,
+            samesite="lax",
+            max_age=settings.session_ttl_days * 24 * 60 * 60,
+        )
+        return response
 
 
 @app.get("/ops-map", response_class=HTMLResponse)

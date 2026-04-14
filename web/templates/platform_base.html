@@ -11,8 +11,10 @@
 <body class="{% block body_class %}min-h-screen bg-gray-50 text-gray-900{% endblock %}">
   <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
-      <a href="/" class="flex min-w-0 items-center gap-3">
-        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-sm font-bold text-white">PB</span>
+      <a href="{% block home_href %}/{% endblock %}" class="flex min-w-0 items-center gap-3">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-sm font-bold text-white">
+          {% block header_icon %}PB{% endblock %}
+        </span>
         <span class="min-w-0">
           <strong class="block truncate text-sm font-semibold text-gray-800">{{ platform_name }}</strong>
           <span class="block truncate text-xs text-gray-400">{% block shell_caption %}Plataforma PinkBlue{% endblock %}</span>
@@ -24,12 +26,14 @@
         <span class="hidden rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500 md:inline-flex">
           {{ platform_user.email }}
         </span>
+        {% block header_module_link %}
         {% if platform_permissions.plantao_access or platform_permissions.manage_plantao %}
-        <a href="/plantao/"
+        <a href="/"
            class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
-          Plantão
+          Plataforma
         </a>
         {% endif %}
+        {% endblock %}
         {% if platform_permissions.manage_users %}
         <a href="/admin/usuarios"
            class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
@@ -49,6 +53,68 @@
       </div>
     </div>
   </header>
+
+  {# ── Dev user switcher colapsável (apenas em ambiente de desenvolvimento) ── #}
+  {% if is_dev and platform_user %}
+  <div id="dev-switcher" class="fixed bottom-4 right-4 z-50">
+    {# Estado colapsado: badge compacto #}
+    <button id="dev-badge"
+            onclick="devSwitcherExpand()"
+            class="flex items-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 shadow-lg text-xs font-semibold text-amber-800 hover:bg-amber-100 transition">
+      <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+      DEV
+    </button>
+
+    {# Estado expandido: painel com select #}
+    <div id="dev-expanded"
+         class="hidden absolute bottom-0 right-0 rounded-2xl border border-amber-300 bg-amber-50 p-3 shadow-lg text-xs min-w-[280px]">
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+          <span class="font-semibold text-amber-800">Dev</span>
+        </div>
+        <button onclick="devSwitcherCollapse()" class="text-amber-500 hover:text-amber-700">
+          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form method="post" action="/dev/switch-user" id="dev-switcher-form">
+        <select name="user_id" id="dev-user-select"
+                onchange="document.getElementById('dev-switcher-form').submit()"
+                class="w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:outline-none">
+          <option value="">Carregando...</option>
+        </select>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function devSwitcherExpand() {
+      document.getElementById('dev-badge').classList.add('hidden');
+      document.getElementById('dev-expanded').classList.remove('hidden');
+      sessionStorage.setItem('devSwitcherOpen', '1');
+    }
+    function devSwitcherCollapse() {
+      document.getElementById('dev-expanded').classList.add('hidden');
+      document.getElementById('dev-badge').classList.remove('hidden');
+      sessionStorage.removeItem('devSwitcherOpen');
+    }
+    // Restaurar estado expandido após reload (ex: troca de usuário)
+    if (sessionStorage.getItem('devSwitcherOpen')) devSwitcherExpand();
+    // Carregar usuários
+    (async () => {
+      try {
+        const res = await fetch('/dev/switch-user');
+        const users = await res.json();
+        const sel = document.getElementById('dev-user-select');
+        sel.innerHTML = users.map(u =>
+          `<option value="${u.id}" ${u.id == {{ platform_user.id }} ? 'selected' : ''}>${u.email} · ${u.role}</option>`
+        ).join('');
+      } catch (e) { console.warn('dev-switcher:', e); }
+    })();
+  </script>
+  {% endif %}
 
   <main class="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
     {% set _sidebar %}{% block sidebar %}{% endblock %}{% endset %}

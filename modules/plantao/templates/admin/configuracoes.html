@@ -9,6 +9,7 @@
   {% if ok %}<div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">Configuracoes salvas.</div>{% endif %}
 
   <form method="post" action="/plantao/admin/configuracoes/salvar" class="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Prazo cancelamento (horas uteis)</label>
       <input type="number" name="plantao_prazo_cancelamento_horas_uteis" value="{{ configuracoes.plantao_prazo_cancelamento_horas_uteis or '24' }}" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">

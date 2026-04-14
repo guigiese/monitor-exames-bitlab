@@ -429,9 +429,18 @@ def build_notification_plan(
                     f"🔬 {item['nome']}\n"
                     f"📊 {s_old} → {s_new}"
                 )
-                if s_new == "Pronto" and s_old != "Pronto":
+                # An item marked Inconsistente means the lab reports Pronto but the
+                # result couldn't be parsed. Treat it as completed so the Telegram
+                # notification fires — the vet needs to know even if we can't display
+                # the result yet.
+                lab_s_new = normalize_status(item.get("lab_status") or "")
+                effective_pronto = s_new == "Pronto" or (
+                    s_new == "Inconsistente" and lab_s_new == "Pronto"
+                )
+                was_already_done = s_old in {"Pronto", "Inconsistente"}
+                if effective_pronto and not was_already_done:
                     completed_items.append((iid, item))
-                elif s_new not in {"Pronto", "Cancelado"}:
+                elif s_new not in {"Pronto", "Cancelado", "Inconsistente"}:
                     updated_items.append((iid, item))
 
         if completed_items:

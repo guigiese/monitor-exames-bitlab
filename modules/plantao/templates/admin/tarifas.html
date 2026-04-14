@@ -11,6 +11,7 @@
   <section class="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
     <h3 class="text-sm font-semibold text-gray-700">Nova tarifa</h3>
     <form method="post" action="/plantao/admin/tarifas/criar" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <select name="tipo_perfil" required class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
         <option value="veterinario">veterinario</option>
         <option value="auxiliar">auxiliar</option>

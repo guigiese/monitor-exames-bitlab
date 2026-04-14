@@ -110,7 +110,7 @@ git checkout -b session/YYYYMMDD-XXXX
 | `labs/` `web/` `core.py` | Exige `[CLAIM]` antes de editar |
 | `docs/DEVLOG.md` | Append-only — sem `[CLAIM]` necessário |
 | `scripts/` `poc/` | Livre — sem `[CLAIM]` necessário |
-| `.secrets` | Nunca tocar |
+| `.secrets` | Leitura livre quando necessária; inclusão permitida com cautela; edição apenas com extremo cuidado para não excluir, sobrescrever ou invalidar segredos existentes |
 
 ---
 

@@ -339,6 +339,56 @@ def listar_candidaturas_por_data(
     )
 
 
+def listar_candidaturas_pendentes(
+    engine: Any,
+    apenas_futuras: bool = True,
+) -> list[dict]:
+    """Lista candidaturas provisórias aguardando confirmação gestor, por data do turno."""
+    hoje = _hoje()
+    return _rows(
+        engine,
+        """
+        SELECT c.*,
+               p.tipo AS posicao_tipo,
+               p.vagas AS posicao_vagas,
+               d.id AS data_id,
+               d.data,
+               d.hora_inicio,
+               d.hora_fim,
+               l.nome AS local_nome,
+               pf.nome AS perfil_nome,
+               pf.email AS perfil_email,
+               pf.tipo AS perfil_tipo
+          FROM plantao_candidaturas c
+          JOIN plantao_posicoes p ON p.id = c.posicao_id
+          JOIN plantao_datas d ON d.id = p.data_id
+          LEFT JOIN plantao_locais l ON l.id = d.local_id
+          JOIN plantao_perfis pf ON pf.id = c.perfil_id
+         WHERE c.status = 'provisorio'
+           AND (:apenas_futuras = 0 OR d.data >= :hoje)
+         ORDER BY d.data ASC, d.hora_inicio ASC, c.criado_em ASC
+        """,
+        {"apenas_futuras": 1 if apenas_futuras else 0, "hoje": hoje},
+    )
+
+
+def contar_candidaturas_pendentes(engine: Any) -> int:
+    hoje = _hoje()
+    rows = _rows(
+        engine,
+        """
+        SELECT COUNT(*) AS total
+          FROM plantao_candidaturas c
+          JOIN plantao_posicoes p ON p.id = c.posicao_id
+          JOIN plantao_datas d ON d.id = p.data_id
+         WHERE c.status = 'provisorio'
+           AND d.data >= :hoje
+        """,
+        {"hoje": hoje},
+    )
+    return int((rows[0]["total"] if rows else 0) or 0)
+
+
 def listar_candidaturas_por_perfil(
     engine: Any,
     perfil_id: int,

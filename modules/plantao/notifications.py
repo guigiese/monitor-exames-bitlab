@@ -61,6 +61,30 @@ def notificar(
         log.exception("Falha ao criar notificação: perfil_id=%s tipo=%s", perfil_id, tipo)
 
 
+def notificar_gestores(
+    engine: Any,
+    tipo: str,
+    titulo: str,
+    corpo: str = "",
+    entidade: str | None = None,
+    entidade_id: int | None = None,
+    permissao: str = "plantao_aprovar_cadastros",
+) -> None:
+    """Notifica todos os gestores que possuem a permissão indicada."""
+    from pb_platform.storage import store
+
+    try:
+        users = store.list_users()
+        for user in users:
+            if user.get("status") != "ativo":
+                continue
+            perms = store.get_user_permissions(user)
+            if perms.get(permissao) or perms.get("manage_plantao"):
+                notificar(engine, user["id"], tipo, titulo, corpo, entidade, entidade_id)
+    except Exception:
+        log.exception("Falha ao notificar gestores: tipo=%s", tipo)
+
+
 def contar_nao_lidas(engine: Any, perfil_id: int) -> int:
     """Retorna o número de notificações não lidas."""
     with engine.connect() as conn:

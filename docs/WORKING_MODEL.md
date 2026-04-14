@@ -348,7 +348,9 @@ A session is closed-out when all of the following are true:
 - `docs/CONTEXT.md` and `docs/DEVLOG.md` are shared — add, do not overwrite existing entries.
 - `config.json` is deploy-sensitive — only change it when the Jira card explicitly requires it.
 - `scripts/` is shared but non-destructive — sessions may add scripts; do not delete another session's scripts without a Jira card.
-- `.secrets` is never touched by any session — human-managed only.
+- `.secrets` may be read whenever operationally necessary.
+- New entries may be added with caution.
+- Existing entries must be edited only with extreme care, never overwriting or deleting valid secrets unintentionally.
 
 ### Conflict Resolution
 

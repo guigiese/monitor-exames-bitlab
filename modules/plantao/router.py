@@ -41,6 +41,14 @@ _templates.env.loader = ChoiceLoader(
         FileSystemLoader(str(PLATFORM_TEMPLATES_DIR)),
     ]
 )
+
+# Filtro tojson para serialização segura em templates
+import json as _json
+
+def _tojson_filter(value, indent=None):
+    return _json.dumps(value, ensure_ascii=False, default=str, indent=indent)
+
+_templates.env.filters["tojson"] = _tojson_filter
 _engine: Any = None
 
 
@@ -73,17 +81,28 @@ def make_router(engine: Any) -> APIRouter:
         request.state.csrf_token = gerar_csrf_token(raw_token)
         return user
 
-    def _exige_gestor(request: Request):
+    # Sub-permissões que concedem acesso a alguma área admin
+    _PLANTAO_ADMIN_PERMS = (
+        "manage_plantao",
+        "plantao_gerir_escalas",
+        "plantao_aprovar_candidaturas",
+        "plantao_aprovar_cadastros",
+        "plantao_ver_relatorios",
+    )
+
+    def _exige_gestor(request: Request, permissao: str = "manage_plantao"):
         """
-        Valida que há um usuário da plataforma logado com permissão manage_plantao.
-        Popula request.state.gestor.
-        Retorna o user dict ou uma RedirectResponse.
+        Valida que o usuário está logado e possui a permissão indicada
+        (ou manage_plantao, que cascateia todas as sub-permissões).
+        Popula request.state.gestor / request.state.user.
+        Retorna o user dict ou uma Response de erro.
         """
         user = attach_user_to_request(request)
         if not user:
             return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
-        if not has_permission(request, "manage_plantao"):
-            return HTMLResponse("<h1>403 — Acesso restrito a gestores de plantão.</h1>", status_code=403)
+        # Aceita manage_plantao (hierarquia) OU a permissão específica da rota
+        if not has_permission(request, permissao) and not has_permission(request, "manage_plantao"):
+            return HTMLResponse("<h1>403 — Sem permissão para esta área.</h1>", status_code=403)
         request.state.gestor = user
         request.state.user = user
         raw_token = request.cookies.get(settings.session_cookie_name, "")
@@ -165,20 +184,236 @@ def make_router(engine: Any) -> APIRouter:
     async def recuperar_senha_compat():
         return RedirectResponse("/login", status_code=301)
 
-    @router.get("/escalas", response_class=HTMLResponse)
-    async def escalas_page(request: Request, mes: int = 0, ano: int = 0, local_id: int = 0):
-        from .queries import listar_datas_com_vagas_abertas, listar_datas_por_mes, listar_locais
+    # ── Agenda unificada ───────────────────────────────────────────────────────
+
+    @router.get("/agenda", response_class=HTMLResponse)
+    async def agenda_page(
+        request: Request,
+        mes: int = 0,
+        ano: int = 0,
+    ):
+        """
+        Tela unificada do plantonista: calendário interativo + filtros rápidos.
+        Unifica: escalas abertas, meus turnos, trocas/cedido e lista de disponibilidade.
+        """
+        from .queries import (
+            listar_datas_por_mes,
+            listar_datas_com_vagas_abertas,
+            listar_candidaturas_por_perfil,
+            listar_substituicoes_abertas,
+            listar_sobreaviso_por_perfil,
+        )
+        from .calendar_utils import build_month_calendar
+        from datetime import date as _date
+        from collections import defaultdict
 
         perfil = _exige_plantonista(request)
         if isinstance(perfil, RedirectResponse):
             return perfil
 
-        now = datetime.utcnow()
-        ano = ano or now.year
-        mes = mes or now.month
+        hoje = _date.today()
+        ano = ano or hoje.year
+        mes = mes or hoje.month
+
+        # ── Coletar todas as fontes de dados ──────────────────────────────────
+
+        # 1. Escalas do mês (presencial publicado)
+        escalas_mes = listar_datas_por_mes(engine, ano, mes, None, status="publicado")
+
+        # 2. Vagas abertas do vet (posições com vaga livre)
+        vagas_abertas = listar_datas_com_vagas_abertas(engine, None, perfil.get("tipo"))
+
+        # 3. Meus turnos confirmados / provisórios
+        minhas_candidaturas = listar_candidaturas_por_perfil(engine, perfil["id"])
+
+        # 4. Substituições abertas (cedido — outro vet liberou o turno)
+        substituicoes = listar_substituicoes_abertas(engine, perfil.get("tipo", ""))
+
+        # 5. Sobreaviso/disponibilidade — abertos no mês
+        sobreavisos_abertos = listar_datas_por_mes(
+            engine, ano, mes, None, tipo="sobreaviso", status="publicado"
+        )
+
+        # 6. Minhas adesões de disponibilidade
+        minhas_adesoes = listar_sobreaviso_por_perfil(engine, perfil["id"])
+        minhas_adesoes_ids = {a["data_id"]: a for a in minhas_adesoes}
+
+        # ── Mapas auxiliares ──────────────────────────────────────────────────
+        vagas_map = {v["posicao_id"]: v for v in vagas_abertas}
+        # Minhas candidaturas por posicao_id (status ativo)
+        minhas_cand_map = {}
+        for c in minhas_candidaturas:
+            if c["status"] in ("confirmado", "provisorio"):
+                minhas_cand_map[c["posicao_id"]] = c
+
+        # Substituições abertas por troca_id
+        subst_map = {s["id"]: s for s in substituicoes}
+
+        # ── Montar eventos_por_data ──────────────────────────────────────────
+        eventos_por_data: dict[str, list[dict]] = defaultdict(list)
+
+        # Escalas presenciais
+        for e in escalas_mes:
+            data = e["data"]
+            # tipo do perfil da posição
+            tipo_raw = e.get("subtipo") or ""
+            tipo = "plantao_aux" if "aux" in tipo_raw.lower() else "plantao_vet"
+
+            ev: dict = {
+                "tipo": tipo,
+                "hora_inicio": e.get("hora_inicio", ""),
+                "hora_fim": e.get("hora_fim", ""),
+                "local_nome": e.get("local_nome", ""),
+                "posicao_id": None,
+                "candidatura_id": None,
+                "substituicao_id": None,
+                "data_id": e["id"],
+                "adesao_id": None,
+            }
+
+            # Verificar se é meu turno
+            posicoes_data = [v for v in vagas_abertas if v["data_id"] == e["id"]]
+            meu_status = None
+            for cand in minhas_candidaturas:
+                if cand["data_id"] == e["id"] and cand["status"] in ("confirmado", "provisorio"):
+                    ev["candidatura_id"] = cand["id"]
+                    meu_status = "meu_turno"
+                    break
+
+            if meu_status:
+                ev["status"] = "meu_turno"
+            elif any(v["data_id"] == e["id"] for v in vagas_abertas):
+                # Tem vaga aberta
+                vaga = next(v for v in vagas_abertas if v["data_id"] == e["id"])
+                ev["status"] = "livre"
+                ev["posicao_id"] = vaga["posicao_id"]
+                if "aux" in (vaga.get("tipo_perfil") or "").lower():
+                    ev["tipo"] = "plantao_aux"
+                else:
+                    ev["tipo"] = "plantao_vet"
+            else:
+                ev["status"] = "preenchido"
+
+            eventos_por_data[data].append(ev)
+
+        # Substituições abertas (cedido)
+        for s in substituicoes:
+            data = s["data"]
+            tipo_raw = s.get("subtipo") or s.get("tipo_posicao") or ""
+            tipo = "plantao_aux" if "aux" in tipo_raw.lower() else "plantao_vet"
+            eventos_por_data[data].append({
+                "tipo": tipo,
+                "status": "cedido",
+                "hora_inicio": s.get("hora_inicio", ""),
+                "hora_fim": s.get("hora_fim", ""),
+                "local_nome": s.get("local_nome", ""),
+                "posicao_id": None,
+                "candidatura_id": None,
+                "substituicao_id": s["id"],
+                "data_id": None,
+                "adesao_id": None,
+            })
+
+        # Disponibilidades do mês
+        for d in sobreavisos_abertos:
+            data = d["data"]
+            if d["id"] in minhas_adesoes_ids:
+                adesao = minhas_adesoes_ids[d["id"]]
+                st = "minha_disponibilidade"
+                adesao_id = adesao["id"]
+            else:
+                st = "disponibilidade_aberta"
+                adesao_id = None
+            eventos_por_data[data].append({
+                "tipo": "disponibilidade",
+                "status": st,
+                "hora_inicio": d.get("hora_inicio", ""),
+                "hora_fim": d.get("hora_fim", ""),
+                "local_nome": d.get("local_nome", ""),
+                "posicao_id": None,
+                "candidatura_id": None,
+                "substituicao_id": None,
+                "data_id": d["id"],
+                "adesao_id": adesao_id,
+            })
+
+        # Ordenar datas
+        datas_ordenadas = sorted(eventos_por_data.keys())
+
+        # ── Feriados do mês para o calendário ────────────────────────────────
+        from .queries import listar_feriados_por_periodo
+        import calendar as _cal
+        _ultimo_dia = _cal.monthrange(ano, mes)[1]
+        inicio_mes = f"{ano:04d}-{mes:02d}-01"
+        fim_mes = f"{ano:04d}-{mes:02d}-{_ultimo_dia:02d}"
+        feriados_rows = listar_feriados_por_periodo(engine, inicio_mes, fim_mes)
+        feriados_dict = {r["data"]: r["nome"] for r in feriados_rows}
+
+        # ── Calendário enriquecido ────────────────────────────────────────────
+        calendario = build_month_calendar(
+            ano, mes, escalas_mes, [], [],
+            eventos_por_data=dict(eventos_por_data),
+            feriados=feriados_dict,
+        )
+
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(
+            request,
+            "plantao_agenda.html",
+            perfil=perfil,
+            ano=ano,
+            mes=mes,
+            hoje=hoje.isoformat(),
+            calendario=calendario,
+            eventos_por_data=dict(eventos_por_data),
+            datas_ordenadas=datas_ordenadas,
+            csrf_token=csrf,
+            erro=request.query_params.get("erro", ""),
+            ok=request.query_params.get("ok", ""),
+        )
+
+    # Redirecionamentos das rotas antigas do plantonista → agenda unificada
+    @router.get("/meus-turnos", response_class=HTMLResponse)
+    async def meus_turnos_redirect(request: Request):
+        return RedirectResponse("/plantao/agenda", status_code=302)
+
+    @router.get("/trocas", response_class=HTMLResponse)
+    async def trocas_redirect(request: Request):
+        return RedirectResponse("/plantao/agenda", status_code=302)
+
+    @router.get("/sobreaviso", response_class=HTMLResponse)
+    async def sobreaviso_redirect(request: Request):
+        return RedirectResponse("/plantao/agenda", status_code=302)
+
+    @router.get("/escalas", response_class=HTMLResponse)
+    async def escalas_page(
+        request: Request,
+        mes: int = 0,
+        ano: int = 0,
+        local_id: int = 0,
+        view: str = "calendario",
+    ):
+        from .queries import (
+            listar_datas_com_vagas_abertas,
+            listar_datas_por_mes,
+            listar_locais,
+            listar_candidaturas_por_perfil,
+        )
+        from .calendar_utils import build_month_calendar
+
+        perfil = _exige_plantonista(request)
+        if isinstance(perfil, RedirectResponse):
+            return perfil
+
+        from datetime import date as _date
+        hoje = _date.today()
+        ano = ano or hoje.year
+        mes = mes or hoje.month
         local_sel = local_id or None
         datas_mes = listar_datas_por_mes(engine, ano, mes, local_sel, status="publicado")
         vagas_abertas = listar_datas_com_vagas_abertas(engine, local_sel, perfil["tipo"])
+        candidaturas = listar_candidaturas_por_perfil(engine, perfil["id"])
+        calendario = build_month_calendar(ano, mes, datas_mes, vagas_abertas, candidaturas)
         csrf = getattr(request.state, "csrf_token", "")
         return _render(
             request,
@@ -188,8 +423,11 @@ def make_router(engine: Any) -> APIRouter:
             mes=mes,
             ano=ano,
             local_id=local_id,
+            view=view,
             datas_mes=datas_mes,
             vagas_abertas=vagas_abertas,
+            calendario=calendario,
+            hoje=hoje.isoformat(),
             csrf_token=csrf,
             erro=request.query_params.get("erro", ""),
             ok=request.query_params.get("ok", ""),
@@ -208,33 +446,6 @@ def make_router(engine: Any) -> APIRouter:
         except ValueError as exc:
             return _redir_erro("/plantao/escalas", str(exc))
         return RedirectResponse("/plantao/escalas?ok=1", status_code=303)
-
-    @router.get("/meus-turnos", response_class=HTMLResponse)
-    async def meus_turnos_page(request: Request):
-        from .queries import listar_candidaturas_por_perfil
-
-        perfil = _exige_plantonista(request)
-        if isinstance(perfil, RedirectResponse):
-            return perfil
-        candidaturas = listar_candidaturas_por_perfil(engine, perfil["id"])
-        grupos = {
-            "confirmado": [c for c in candidaturas if c["status"] == "confirmado"],
-            "provisorio": [c for c in candidaturas if c["status"] == "provisorio"],
-            "lista_espera": [c for c in candidaturas if c["status"] == "lista_espera"],
-            "cancelado": [c for c in candidaturas if c["status"] == "cancelado"],
-            "recusado": [c for c in candidaturas if c["status"] == "recusado"],
-        }
-        csrf = getattr(request.state, "csrf_token", "")
-        return _render(
-            request,
-            "plantao_meus_turnos.html",
-            perfil=perfil,
-            candidaturas=candidaturas,
-            grupos=grupos,
-            csrf_token=csrf,
-            erro=request.query_params.get("erro", ""),
-            ok=request.query_params.get("ok", ""),
-        )
 
     @router.post("/candidaturas/{candidatura_id}/cancelar")
     async def cancelar_candidatura_action(request: Request, candidatura_id: int):
@@ -259,27 +470,6 @@ def make_router(engine: Any) -> APIRouter:
         except ValueError as exc:
             return _redir_erro("/plantao/meus-turnos", str(exc))
         return RedirectResponse("/plantao/meus-turnos?ok=1", status_code=303)
-
-    @router.get("/trocas", response_class=HTMLResponse)
-    async def trocas_page(request: Request):
-        from .queries import listar_substituicoes_abertas, listar_trocas_por_perfil
-
-        perfil = _exige_plantonista(request)
-        if isinstance(perfil, RedirectResponse):
-            return perfil
-        trocas = listar_trocas_por_perfil(engine, perfil["id"])
-        substituicoes_abertas = listar_substituicoes_abertas(engine, perfil["tipo"])
-        csrf = getattr(request.state, "csrf_token", "")
-        return _render(
-            request,
-            "plantao_trocas.html",
-            perfil=perfil,
-            trocas=trocas,
-            substituicoes_abertas=substituicoes_abertas,
-            csrf_token=csrf,
-            erro=request.query_params.get("erro", ""),
-            ok=request.query_params.get("ok", ""),
-        )
 
     @router.post("/trocas/solicitar")
     async def solicitar_troca_action(
@@ -358,34 +548,6 @@ def make_router(engine: Any) -> APIRouter:
         except ValueError as exc:
             return _redir_erro("/plantao/trocas", str(exc))
         return RedirectResponse("/plantao/trocas?ok=1", status_code=303)
-
-    @router.get("/sobreaviso", response_class=HTMLResponse)
-    async def sobreaviso_page(request: Request):
-        from .queries import listar_datas_por_mes, listar_sobreaviso_por_perfil
-
-        perfil = _exige_plantonista(request)
-        if isinstance(perfil, RedirectResponse):
-            return perfil
-        now = datetime.utcnow()
-        minhas_adesoes = listar_sobreaviso_por_perfil(engine, perfil["id"])
-        sobreavisos_abertos = listar_datas_por_mes(
-            engine,
-            now.year,
-            now.month,
-            tipo="sobreaviso",
-            status="publicado",
-        )
-        csrf = getattr(request.state, "csrf_token", "")
-        return _render(
-            request,
-            "plantao_sobreaviso.html",
-            perfil=perfil,
-            minhas_adesoes=minhas_adesoes,
-            sobreavisos_abertos=sobreavisos_abertos,
-            csrf_token=csrf,
-            erro=request.query_params.get("erro", ""),
-            ok=request.query_params.get("ok", ""),
-        )
 
     @router.post("/sobreaviso/{data_id}/aderir")
     async def aderir_sobreaviso_action(request: Request, data_id: int):
@@ -519,31 +681,34 @@ def make_router(engine: Any) -> APIRouter:
 
     @router.get("/admin/cadastros", response_class=HTMLResponse)
     async def admin_cadastros(request: Request):
-        from .queries import listar_perfis
-
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_cadastros")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
-        pendentes = listar_perfis(engine, status="pendente")
-        ativos = listar_perfis(engine, status="ativo")
-        inativos = listar_perfis(engine, status="inativo")
-        rejeitados = listar_perfis(engine, status="rejeitado")
+        # Usar platform users (auth unificada) filtrados por role de plantonista
+        from pb_platform.storage import EXTERNAL_ROLES
+        all_users = store.list_users()
+        externos = [u for u in all_users if u.get("role") in EXTERNAL_ROLES]
+        pendentes = [u for u in externos if u.get("status") == "pendente"]
+        ativos = [u for u in externos if u.get("status") == "ativo"]
+        inativos_rejeitados = [u for u in externos if u.get("status") in ("inativo", "rejeitado")]
+        csrf = getattr(request.state, "csrf_token", "")
         return _render(
             request,
             "admin/cadastros.html",
             pendentes=pendentes,
             ativos=ativos,
-            inativos=inativos,
-            rejeitados=rejeitados,
+            inativos_rejeitados=inativos_rejeitados,
+            csrf_token=csrf,
         )
 
     @router.post("/admin/cadastros/{perfil_id}/aprovar")
     async def admin_aprovar_cadastro(request: Request, perfil_id: int):
         from .actions import aprovar_plantonista
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_cadastros")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             aprovar_plantonista(engine, perfil_id, gestor["id"], ip=request.client.host if request.client else "")
         except ValueError as exc:
@@ -554,9 +719,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_rejeitar_cadastro(request: Request, perfil_id: int, motivo: str = Form("")):
         from .actions import rejeitar_plantonista
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_cadastros")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             rejeitar_plantonista(
                 engine, perfil_id, gestor["id"], motivo=motivo, ip=request.client.host if request.client else ""
@@ -569,9 +735,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_desativar(request: Request, perfil_id: int):
         from .actions import desativar_plantonista
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_cadastros")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             desativar_plantonista(engine, perfil_id, gestor["id"], ip=request.client.host if request.client else "")
         except ValueError as exc:
@@ -580,17 +747,35 @@ def make_router(engine: Any) -> APIRouter:
 
     @router.get("/admin/escalas", response_class=HTMLResponse)
     async def admin_escalas(request: Request, mes: int = 0, ano: int = 0, local_id: int = 0):
-        from .queries import listar_datas_por_mes, listar_locais
+        from .queries import listar_datas_por_mes, listar_locais, listar_feriados_por_periodo
+        from .calendar_utils import build_month_calendar
+        import calendar as _cal
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         now = datetime.utcnow()
         ano = ano or now.year
         mes = mes or now.month
         local_sel = local_id or None
+
         datas = listar_datas_por_mes(engine, ano, mes, local_sel)
         locais = listar_locais(engine)
+
+        # Feriados do mês para o calendário e para o painel JS
+        _ultimo_dia = _cal.monthrange(ano, mes)[1]
+        inicio_mes = f"{ano:04d}-{mes:02d}-01"
+        fim_mes = f"{ano:04d}-{mes:02d}-{_ultimo_dia:02d}"
+        feriados_rows = listar_feriados_por_periodo(engine, inicio_mes, fim_mes)
+        feriados_dict = {r["data"]: r["nome"] for r in feriados_rows}
+
+        # Calendário enriquecido com datas e feriados
+        calendario = build_month_calendar(
+            ano, mes, datas, [], [],
+            feriados=feriados_dict,
+        )
+
+        csrf = getattr(request.state, "csrf_token", "")
         return _render(
             request,
             "admin/escalas.html",
@@ -599,6 +784,9 @@ def make_router(engine: Any) -> APIRouter:
             local_id=local_id,
             locais=locais,
             datas=datas,
+            calendario=calendario,
+            feriados_dict=feriados_dict,
+            csrf_token=csrf,
             erro=request.query_params.get("erro", ""),
             ok=request.query_params.get("ok", ""),
         )
@@ -607,9 +795,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_criar_data(request: Request):
         from .actions import criar_data_plantao
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
 
         form = await request.form()
         try:
@@ -628,6 +817,7 @@ def make_router(engine: Any) -> APIRouter:
                     posicoes.append({"tipo": "veterinario", "vagas": vet_vagas})
                 if aux_vagas > 0:
                     posicoes.append({"tipo": "auxiliar", "vagas": aux_vagas})
+            auto_approve = form.get("auto_approve") in ("1", "on", "true")
             criar_data_plantao(
                 engine,
                 local_id=local_id,
@@ -640,18 +830,66 @@ def make_router(engine: Any) -> APIRouter:
                 gestor_id=gestor["id"],
                 observacoes=observacoes,
                 ip=request.client.host if request.client else "",
+                auto_approve=auto_approve,
             )
         except Exception as exc:
             return _redir_erro("/plantao/admin/escalas", str(exc))
         return RedirectResponse("/plantao/admin/escalas?ok=1", status_code=303)
 
+    @router.post("/admin/escalas/criar-lote")
+    async def admin_criar_lote(request: Request):
+        from .actions import criar_lote_plantao
+
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
+        if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
+            return gestor
+        await _validar_csrf_ou_403(request)
+
+        form = await request.form()
+        try:
+            local_id = int(form.get("local_id", 0))
+            tipo = str(form.get("tipo", "presencial"))
+            subtipo = str(form.get("subtipo", "regular"))
+            data_inicio = str(form.get("data_inicio", ""))
+            data_fim = str(form.get("data_fim", ""))
+            hora_inicio = str(form.get("hora_inicio", "08:00"))
+            hora_fim = str(form.get("hora_fim", "20:00"))
+            vet_vagas = int(form.get("vagas_veterinario", 1) or 0)
+            aux_vagas = int(form.get("vagas_auxiliar", 0) or 0)
+            observacoes = str(form.get("observacoes", ""))
+            auto_approve = form.get("auto_approve") in ("1", "on", "true")
+            # dias_semana: "0" a "6" (0=seg, 6=dom)
+            dias_semana = [int(d) for d in form.getlist("dias_semana") if d.isdigit()]
+            resultado = criar_lote_plantao(
+                engine,
+                local_id=local_id,
+                tipo=tipo,
+                subtipo=subtipo,
+                data_inicio=data_inicio,
+                data_fim=data_fim,
+                dias_semana=dias_semana,
+                hora_inicio=hora_inicio,
+                hora_fim=hora_fim,
+                vagas_veterinario=vet_vagas,
+                vagas_auxiliar=aux_vagas,
+                gestor_id=gestor["id"],
+                auto_approve=auto_approve,
+                observacoes=observacoes,
+                ip=request.client.host if request.client else "",
+            )
+            total = resultado["total"]
+        except Exception as exc:
+            return _redir_erro("/plantao/admin/escalas", str(exc))
+        return RedirectResponse(f"/plantao/admin/escalas?ok={total}_criadas", status_code=303)
+
     @router.post("/admin/escalas/{data_id}/publicar")
     async def admin_publicar_data(request: Request, data_id: int):
         from .actions import publicar_data_plantao
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             publicar_data_plantao(engine, data_id, gestor["id"], ip=request.client.host if request.client else "")
         except ValueError as exc:
@@ -662,9 +900,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_cancelar_data(request: Request, data_id: int):
         from .actions import cancelar_data_plantao
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             cancelar_data_plantao(engine, data_id, gestor["id"], ip=request.client.host if request.client else "")
         except ValueError as exc:
@@ -680,31 +919,120 @@ def make_router(engine: Any) -> APIRouter:
     ):
         from .actions import gerar_escala_mensal
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_gerir_escalas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             gerar_escala_mensal(engine, local_id, ano, mes, gestor["id"])
         except ValueError as exc:
             return _redir_erro("/plantao/admin/escalas", str(exc))
         return RedirectResponse("/plantao/admin/escalas?ok=1", status_code=303)
 
+    # ── Fila unificada de aprovações ──────────────────────────────────────────
+
+    @router.get("/admin/aprovacoes", response_class=HTMLResponse)
+    async def admin_aprovacoes(request: Request, historico: str = ""):
+        from .queries import listar_candidaturas_pendentes, listar_candidaturas_por_data
+
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
+        if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
+            return gestor
+        pendentes = listar_candidaturas_pendentes(engine, apenas_futuras=True)
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(
+            request,
+            "admin/aprovacoes.html",
+            pendentes=pendentes,
+            csrf_token=csrf,
+            erro=request.query_params.get("erro", ""),
+            ok=request.query_params.get("ok", ""),
+        )
+
+    @router.post("/admin/aprovacoes/lote")
+    async def admin_aprovacoes_lote(request: Request):
+        from .actions import confirmar_candidatura, recusar_candidatura
+
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
+        if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
+            return gestor
+        await _validar_csrf_ou_403(request)
+        form = await request.form()
+        ids_raw = form.getlist("candidatura_id")
+        acao = str(form.get("acao", "confirmar"))
+        motivo = str(form.get("motivo", ""))
+        confirmadas = 0
+        ip = request.client.host if request.client else ""
+        for id_str in ids_raw:
+            try:
+                cid = int(id_str)
+                if acao == "recusar":
+                    recusar_candidatura(engine, cid, gestor["id"], motivo=motivo, ip=ip)
+                else:
+                    confirmar_candidatura(engine, cid, gestor["id"], ip=ip)
+                confirmadas += 1
+            except Exception:
+                pass
+        return RedirectResponse(f"/plantao/admin/aprovacoes?ok={confirmadas}", status_code=303)
+
+    @router.post("/admin/aprovacoes/confirmar/{candidatura_id}")
+    async def admin_aprovacoes_confirmar(request: Request, candidatura_id: int):
+        """Ação rápida de aprovação individual na fila de aprovações."""
+        from .actions import confirmar_candidatura
+
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
+        if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
+            return gestor
+        await _validar_csrf_ou_403(request)
+        try:
+            confirmar_candidatura(engine, candidatura_id, gestor["id"], ip=request.client.host if request.client else "")
+        except ValueError as exc:
+            return _redir_erro("/plantao/admin/aprovacoes", str(exc))
+        return RedirectResponse("/plantao/admin/aprovacoes?ok=1", status_code=303)
+
+    @router.post("/admin/aprovacoes/recusar/{candidatura_id}")
+    async def admin_aprovacoes_recusar(request: Request, candidatura_id: int, motivo: str = Form("")):
+        """Ação rápida de recusa individual na fila de aprovações."""
+        from .actions import recusar_candidatura
+
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
+        if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
+            return gestor
+        await _validar_csrf_ou_403(request)
+        try:
+            recusar_candidatura(engine, candidatura_id, gestor["id"], motivo=motivo, ip=request.client.host if request.client else "")
+        except ValueError as exc:
+            return _redir_erro("/plantao/admin/aprovacoes", str(exc))
+        return RedirectResponse("/plantao/admin/aprovacoes", status_code=303)
+
+    @router.get("/partials/badge-pendentes", response_class=HTMLResponse)
+    async def badge_pendentes(request: Request):
+        from .queries import contar_candidaturas_pendentes
+        n = contar_candidaturas_pendentes(engine)
+        if n > 0:
+            return HTMLResponse(
+                f'<span class="ml-auto rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{n}</span>'
+            )
+        return HTMLResponse("")
+
     @router.get("/admin/candidaturas", response_class=HTMLResponse)
     async def admin_candidaturas(request: Request, data_id: int = 0):
         from .queries import listar_candidaturas_por_data, listar_datas_por_mes
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         now = datetime.utcnow()
         datas = listar_datas_por_mes(engine, now.year, now.month, status="publicado")
         candidaturas = listar_candidaturas_por_data(engine, data_id) if data_id else []
+        csrf = getattr(request.state, "csrf_token", "")
         return _render(
             request,
             "admin/candidaturas.html",
             data_id=data_id,
             datas=datas,
             candidaturas=candidaturas,
+            csrf_token=csrf,
             erro=request.query_params.get("erro", ""),
             ok=request.query_params.get("ok", ""),
         )
@@ -713,9 +1041,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_confirmar_candidatura(request: Request, candidatura_id: int):
         from .actions import confirmar_candidatura
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             confirmar_candidatura(engine, candidatura_id, gestor["id"], ip=request.client.host if request.client else "")
         except ValueError as exc:
@@ -726,9 +1055,10 @@ def make_router(engine: Any) -> APIRouter:
     async def admin_recusar_candidatura(request: Request, candidatura_id: int, motivo: str = Form("")):
         from .actions import recusar_candidatura
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             recusar_candidatura(
                 engine,
@@ -741,22 +1071,31 @@ def make_router(engine: Any) -> APIRouter:
             return _redir_erro("/plantao/admin/candidaturas", str(exc))
         return RedirectResponse("/plantao/admin/candidaturas?ok=1", status_code=303)
 
+    @router.get("/admin/disponibilidade", response_class=HTMLResponse)
+    async def admin_disponibilidade_redirect(request: Request):
+        """Alias de compatibilidade: sidebar aponta para /disponibilidade, rota real é /sobreaviso."""
+        qs = str(request.url.query)
+        target = "/plantao/admin/sobreaviso" + (f"?{qs}" if qs else "")
+        return RedirectResponse(target, status_code=302)
+
     @router.get("/admin/sobreaviso", response_class=HTMLResponse)
     async def admin_sobreaviso(request: Request, data_id: int = 0):
         from .queries import listar_datas_por_mes, listar_sobreaviso_por_data
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_aprovar_candidaturas")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         now = datetime.utcnow()
         datas = listar_datas_por_mes(engine, now.year, now.month, tipo="sobreaviso", status="publicado")
         adesoes = listar_sobreaviso_por_data(engine, data_id) if data_id else []
+        csrf = getattr(request.state, "csrf_token", "")
         return _render(
             request,
             "admin/sobreaviso.html",
             data_id=data_id,
             datas=datas,
             adesoes=adesoes,
+            csrf_token=csrf,
             erro=request.query_params.get("erro", ""),
             ok=request.query_params.get("ok", ""),
         )
@@ -768,6 +1107,7 @@ def make_router(engine: Any) -> APIRouter:
         gestor = _exige_gestor(request)
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         form = await request.form()
         nova_ordem_raw = str(form.get("nova_ordem", "")).strip()
         try:
@@ -785,7 +1125,7 @@ def make_router(engine: Any) -> APIRouter:
 
     @router.get("/admin/relatorios", response_class=HTMLResponse)
     async def admin_relatorios(request: Request):
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         return _render(request, "admin/relatorios.html")
@@ -794,7 +1134,7 @@ def make_router(engine: Any) -> APIRouter:
     async def relatorio_escalas(request: Request, data_inicio: str = "", data_fim: str = "", local_id: int = 0):
         from .queries import relatorio_escalas_por_periodo
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         if not data_inicio or not data_fim:
@@ -808,7 +1148,7 @@ def make_router(engine: Any) -> APIRouter:
     async def relatorio_participacao(request: Request, data_inicio: str = "", data_fim: str = ""):
         from .queries import relatorio_participacao_por_plantonista
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         if not data_inicio or not data_fim:
@@ -822,7 +1162,7 @@ def make_router(engine: Any) -> APIRouter:
     async def relatorio_cancelamentos(request: Request, data_inicio: str = "", data_fim: str = ""):
         from .queries import relatorio_cancelamentos_trocas
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         if not data_inicio or not data_fim:
@@ -836,7 +1176,7 @@ def make_router(engine: Any) -> APIRouter:
     async def relatorio_pre_fechamento(request: Request, data_inicio: str = "", data_fim: str = "", local_id: int = 0):
         from .queries import listar_datas_por_mes, relatorio_pre_fechamento
 
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         if not data_inicio or not data_fim:
@@ -880,6 +1220,7 @@ def make_router(engine: Any) -> APIRouter:
         gestor = _exige_gestor(request)
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             criar_local(engine, nome, endereco, cidade, uf, telefone, gestor["id"])
         except ValueError as exc:
@@ -903,6 +1244,7 @@ def make_router(engine: Any) -> APIRouter:
         gestor = _exige_gestor(request)
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         form = await request.form()
         try:
             criar_tarifa(
@@ -946,6 +1288,7 @@ def make_router(engine: Any) -> APIRouter:
         gestor = _exige_gestor(request)
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         try:
             criar_feriado(engine, data, nome, tipo, int(local_id) if local_id else None, gestor["id"])
         except Exception as exc:
@@ -976,6 +1319,7 @@ def make_router(engine: Any) -> APIRouter:
         gestor = _exige_gestor(request)
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
+        await _validar_csrf_ou_403(request)
         form = await request.form()
         try:
             for chave in (
@@ -1000,7 +1344,7 @@ def make_router(engine: Any) -> APIRouter:
         data_fim: str = "",
         page: int = 1,
     ):
-        gestor = _exige_gestor(request)
+        gestor = _exige_gestor(request, "plantao_ver_relatorios")
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         page = max(page, 1)
@@ -1083,6 +1427,7 @@ def _render(request: Request, template: str, **ctx):
             "platform_user": platform_user,
             "platform_permissions": store.get_user_permissions(platform_user) if platform_user else {},
             "module_name": ctx.pop("module_name", "Plantão"),
+            "is_dev": settings.is_dev,
             **ctx,
         },
     )

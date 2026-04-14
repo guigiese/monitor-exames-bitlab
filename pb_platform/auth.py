@@ -23,7 +23,7 @@ PUBLIC_PATH_PREFIXES = (
 
 # ── CSRF ──────────────────────────────────────────────────────────────────────
 
-_CSRF_SECRET = os.environ.get("PB_CSRF_SECRET") or secrets.token_hex(32)
+_CSRF_SECRET = settings.csrf_secret or os.environ.get("PB_CSRF_SECRET") or secrets.token_hex(32)
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "csrf_token"
 
@@ -87,6 +87,19 @@ def user_permissions(user: dict | None) -> dict[str, bool]:
     return store.get_user_permissions(user)
 
 
+def default_redirect_for_user(user: dict | None) -> str:
+    permissions = user_permissions(user)
+    if permissions.get("manage_plantao"):
+        return "/plantao/admin/"
+    if permissions.get("platform_access"):
+        return "/"
+    if permissions.get("plantao_access"):
+        return "/plantao/"
+    if permissions.get("labmonitor_access"):
+        return "/labmonitor/"
+    return "/login"
+
+
 def has_permission(request: Request, permission: str) -> bool:
     user = getattr(request.state, "user", None)
     if not user:
@@ -96,13 +109,21 @@ def has_permission(request: Request, permission: str) -> bool:
 
 def required_permission(path: str, method: str) -> str | None:
     method = method.upper()
-    # Módulo Plantão — admin precisa de manage_plantao, plantonistas de plantao_access
+    # Módulo Plantão — granularidade por sub-rota
+    if path.startswith("/plantao/admin/escalas"):
+        return "plantao_gerir_escalas"
+    if path.startswith("/plantao/admin/candidaturas") or path.startswith("/plantao/admin/disponibilidade") or path.startswith("/plantao/admin/aprovacoes"):
+        return "plantao_aprovar_candidaturas"
+    if path.startswith("/plantao/admin/cadastros"):
+        return "plantao_aprovar_cadastros"
+    if path.startswith("/plantao/admin/relatorios") or path.startswith("/plantao/admin/audit-log"):
+        return "plantao_ver_relatorios"
     if path.startswith("/plantao/admin"):
         return "manage_plantao"
     if path.startswith("/plantao"):
         return "plantao_access"
     # Plataforma interna
-    if path.startswith("/admin/usuarios") or path.startswith("/admin/permissoes"):
+    if path.startswith("/admin/usuarios") or path.startswith("/admin/permissoes") or path.startswith("/admin/perfis"):
         return "manage_users"
     if path.startswith("/ops-map") or path.startswith("/sandboxes"):
         return "ops_tools"
@@ -125,4 +146,4 @@ def forbidden_response(request: Request):
             '<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Você não tem permissão para acessar esta área.</div>',
             status_code=403,
         )
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url=default_redirect_for_user(getattr(request.state, "user", None)), status_code=303)

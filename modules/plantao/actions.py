@@ -19,7 +19,7 @@ from .business import (
     inferir_subtipo,
     pode_cancelar,
 )
-from .notifications import notificar
+from .notifications import notificar, notificar_gestores
 from .queries import (
     candidatura_existe,
     contar_confirmados_por_posicao,
@@ -133,10 +133,11 @@ def aprovar_plantonista(
     ip: str = "",
 ) -> None:
     """Aprova um cadastro pendente via store da plataforma."""
-    perfil = get_perfil_por_id(engine, perfil_id)
-    if not perfil:
-        raise ValueError("Plantonista nao encontrado.")
-    if perfil["status"] != "pendente":
+    # Verifica via users table (auth unificada)
+    usuario = store.get_user_by_id(perfil_id)
+    if not usuario:
+        raise ValueError("Usuário nao encontrado.")
+    if usuario.get("status") != "pendente":
         raise ValueError("Apenas cadastros pendentes podem ser aprovados.")
 
     store.approve_user(perfil_id, approved_by_id=gestor_id)
@@ -168,10 +169,11 @@ def rejeitar_plantonista(
     ip: str = "",
 ) -> None:
     """Rejeita um cadastro pendente via store da plataforma."""
-    perfil = get_perfil_por_id(engine, perfil_id)
-    if not perfil:
-        raise ValueError("Plantonista nao encontrado.")
-    if perfil["status"] != "pendente":
+    # Verifica via users table (auth unificada)
+    usuario = store.get_user_by_id(perfil_id)
+    if not usuario:
+        raise ValueError("Usuário nao encontrado.")
+    if usuario.get("status") != "pendente":
         raise ValueError("Apenas cadastros pendentes podem ser rejeitados.")
 
     store.reject_user(perfil_id, motivo=motivo.strip())
@@ -203,10 +205,10 @@ def desativar_plantonista(
     ip: str = "",
 ) -> None:
     """Desativa conta de plantonista via store da plataforma."""
-    perfil = get_perfil_por_id(engine, perfil_id)
-    if not perfil:
-        raise ValueError("Plantonista nao encontrado.")
-    if perfil["status"] != "ativo":
+    usuario = store.get_user_by_id(perfil_id)
+    if not usuario:
+        raise ValueError("Usuário nao encontrado.")
+    if usuario.get("status") != "ativo":
         raise ValueError("Somente plantonista ativo pode ser desativado.")
 
     store.set_user_active(perfil_id, False)
@@ -493,6 +495,7 @@ def criar_data_plantao(
     gestor_id: int,
     observacoes: str = "",
     ip: str = "",
+    auto_approve: bool = False,
 ) -> int:
     if tipo not in ("presencial", "sobreaviso"):
         raise ValueError("Tipo de plantao invalido.")
@@ -514,9 +517,9 @@ def criar_data_plantao(
             conn,
             """
             INSERT INTO plantao_datas
-                (local_id, tipo, subtipo, data, hora_inicio, hora_fim, observacoes, status, criado_em, alterado_em, criado_por)
+                (local_id, tipo, subtipo, data, hora_inicio, hora_fim, observacoes, status, auto_approve, criado_em, alterado_em, criado_por)
             VALUES
-                (:local_id, :tipo, :subtipo, :data, :hora_inicio, :hora_fim, :observacoes, 'rascunho', :agora, :agora, :gestor_id)
+                (:local_id, :tipo, :subtipo, :data, :hora_inicio, :hora_fim, :observacoes, 'rascunho', :auto_approve, :agora, :agora, :gestor_id)
             """,
             {
                 "local_id": local_id,
@@ -526,6 +529,7 @@ def criar_data_plantao(
                 "hora_inicio": hora_inicio,
                 "hora_fim": hora_fim,
                 "observacoes": observacoes.strip(),
+                "auto_approve": auto_approve,
                 "agora": agora,
                 "gestor_id": gestor_id,
             },
@@ -556,6 +560,76 @@ def criar_data_plantao(
         ip=ip,
     )
     return data_id
+
+
+def criar_lote_plantao(
+    engine: Any,
+    local_id: int,
+    tipo: str,
+    subtipo: str,
+    data_inicio: str,
+    data_fim: str,
+    dias_semana: list[int],
+    hora_inicio: str,
+    hora_fim: str,
+    vagas_veterinario: int,
+    vagas_auxiliar: int,
+    gestor_id: int,
+    auto_approve: bool = False,
+    observacoes: str = "",
+    ip: str = "",
+) -> dict:
+    """
+    Cria múltiplas datas de plantão para um período e dias da semana.
+
+    dias_semana: lista de inteiros 0-6 (0=seg ... 6=dom, convenção Python weekday)
+    Retorna: {"criadas": [data_id,...], "ignoradas": [date_str,...], "total": int}
+    """
+    from datetime import date as _date, timedelta
+
+    inicio = _date.fromisoformat(data_inicio)
+    fim = _date.fromisoformat(data_fim)
+    if fim < inicio:
+        raise ValueError("data_fim deve ser >= data_inicio.")
+    if not dias_semana:
+        raise ValueError("Selecione pelo menos um dia da semana.")
+
+    dias_set = set(dias_semana)
+    criadas: list[int] = []
+    ignoradas: list[str] = []
+
+    d = inicio
+    while d <= fim:
+        if d.weekday() in dias_set:
+            posicoes = []
+            if vagas_veterinario > 0:
+                posicoes.append({"tipo": "veterinario", "vagas": vagas_veterinario})
+            if vagas_auxiliar > 0:
+                posicoes.append({"tipo": "auxiliar", "vagas": vagas_auxiliar})
+            if not posicoes:
+                ignoradas.append(d.isoformat())
+            else:
+                try:
+                    data_id = criar_data_plantao(
+                        engine,
+                        local_id=local_id,
+                        tipo=tipo,
+                        subtipo=subtipo,
+                        data=d.isoformat(),
+                        hora_inicio=hora_inicio,
+                        hora_fim=hora_fim,
+                        posicoes=posicoes,
+                        gestor_id=gestor_id,
+                        observacoes=observacoes,
+                        ip=ip,
+                        auto_approve=auto_approve,
+                    )
+                    criadas.append(data_id)
+                except ValueError:
+                    ignoradas.append(d.isoformat())
+        d += timedelta(days=1)
+
+    return {"criadas": criadas, "ignoradas": ignoradas, "total": len(criadas)}
 
 
 def publicar_data_plantao(
@@ -824,6 +898,17 @@ def candidatar(
             entidade="plantao_candidaturas",
             entidade_id=candidatura_id,
         )
+    else:
+        # provisorio — notifica gestores para que possam confirmar
+        notificar_gestores(
+            engine,
+            "nova_candidatura",
+            f"Nova candidatura: {posicao['data']} {posicao['hora_inicio']}–{posicao['hora_fim']}",
+            f"{perfil['tipo']} · {perfil.get('nome') or perfil.get('email', '')}",
+            entidade="plantao_candidaturas",
+            entidade_id=candidatura_id,
+            permissao="plantao_aprovar_candidaturas",
+        )
     return candidatura_id
 
 
@@ -990,6 +1075,15 @@ def cancelar_candidatura(
         entidade="plantao_candidaturas",
         entidade_id=candidatura_id,
         ip=ip,
+    )
+    notificar_gestores(
+        engine,
+        "candidatura_cancelada",
+        f"Candidatura cancelada: {cand['data']} {cand['hora_inicio']}–{cand['hora_fim']}",
+        f"{cand.get('perfil_nome') or cand.get('perfil_email', '')} cancelou a candidatura.",
+        entidade="plantao_candidaturas",
+        entidade_id=candidatura_id,
+        permissao="plantao_aprovar_candidaturas",
     )
 
 

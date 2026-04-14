@@ -125,6 +125,88 @@ def limpar_sessoes_expiradas(engine: Any) -> int:
     return 0
 
 
+def enviar_lembretes_turno(engine: Any) -> int:
+    """Envia lembretes D-1 e D-0 para plantonistas com turnos confirmados.
+
+    Evita duplicatas verificando se a notificação já foi enviada para cada
+    candidatura+tipo de lembrete.
+    Retorna total de notificações enviadas.
+    """
+    from datetime import timedelta, date as _date
+    from .notifications import notificar
+
+    hoje = _date.today()
+    amanha = (hoje + timedelta(days=1)).isoformat()
+    hoje_str = hoje.isoformat()
+
+    lembretes = [
+        (amanha, "lembrete_d1", "Lembrete: plantão amanhã"),
+        (hoje_str, "lembrete_d0", "Lembrete: plantão hoje"),
+    ]
+    enviados = 0
+
+    try:
+        for data_alvo, tipo_notif, titulo in lembretes:
+            with engine.connect() as conn:
+                candidaturas = conn.execute(
+                    text(
+                        """
+                        SELECT c.id AS candidatura_id,
+                               c.perfil_id,
+                               d.data,
+                               d.hora_inicio,
+                               d.hora_fim
+                          FROM plantao_candidaturas c
+                          JOIN plantao_posicoes p ON p.id = c.posicao_id
+                          JOIN plantao_datas d ON d.id = p.data_id
+                         WHERE c.status = 'confirmado'
+                           AND d.data = :data_alvo
+                        """
+                    ),
+                    {"data_alvo": data_alvo},
+                ).mappings().all()
+
+                # IDs que já têm lembrete deste tipo
+                ja_enviados: set[int] = set()
+                if candidaturas:
+                    ids = [int(r["candidatura_id"]) for r in candidaturas]
+                    placeholders = ",".join(str(i) for i in ids)
+                    enviados_rows = conn.execute(
+                        text(
+                            f"SELECT entidade_id FROM plantao_notificacoes"
+                            f" WHERE tipo = :tipo AND entidade = 'plantao_candidaturas'"
+                            f"   AND entidade_id IN ({placeholders})"
+                        ),
+                        {"tipo": tipo_notif},
+                    ).mappings().all()
+                    ja_enviados = {int(r["entidade_id"]) for r in enviados_rows}
+
+            for row in candidaturas:
+                cand_id = int(row["candidatura_id"])
+                if cand_id in ja_enviados:
+                    continue
+                corpo = (
+                    f"Voce tem um turno confirmado em "
+                    f"{row['data']} das {row['hora_inicio']} às {row['hora_fim']}."
+                )
+                notificar(
+                    engine,
+                    int(row["perfil_id"]),
+                    tipo_notif,
+                    titulo,
+                    corpo,
+                    entidade="plantao_candidaturas",
+                    entidade_id=cand_id,
+                )
+                enviados += 1
+
+        if enviados:
+            log.info("[plantao.jobs] %d lembrete(s) de turno enviado(s).", enviados)
+    except Exception:
+        log.exception("[plantao.jobs] Erro em enviar_lembretes_turno")
+    return enviados
+
+
 def limpar_notificacoes_antigas(engine: Any, dias: int = 30) -> int:
     """Remove notificações lidas com mais de N dias."""
     from datetime import timedelta, date as _date
@@ -170,6 +252,7 @@ def run_plantao_jobs(engine: Any, interval_seconds: int = 300) -> None:
             encerrar_escalas_passadas(engine)
             expirar_trocas(engine)
             alertar_sobreaviso_vazio(engine)
+            enviar_lembretes_turno(engine)
             limpar_sessoes_expiradas(engine)
             limpar_notificacoes_antigas(engine)
         except Exception:

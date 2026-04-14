@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import secrets
-import sqlite3
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy import Column, Float, Integer, MetaData, Table, Text, create_engine, event, inspect, text
+from sqlalchemy.pool import NullPool
 
 from .security import hash_password, token_hash, verify_password
 from .settings import settings
@@ -14,20 +16,6 @@ from .settings import settings
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = ROOT / "config.json"
 TELEGRAM_USERS_FILE = ROOT / "telegram_users.json"
-
-# ── Permissões por role/categoria ─────────────────────────────────────────────
-#
-# Roles internos:  admin, operator, viewer
-# Categorias externas (auto-cadastro): veterinario, auxiliar, colaborador
-#
-# Permissões disponíveis:
-#   platform_access   – acessa a home e módulos internos
-#   labmonitor_access – acessa /labmonitor (leitura)
-#   manage_labmonitor – gerencia lab monitor
-#   ops_tools         – acessa ops-map e sandboxes
-#   manage_users      – administra usuários
-#   plantao_access    – acessa /plantao (plantonistas)
-#   manage_plantao    – gerencia escalas e aprova cadastros (gestores)
 
 ALL_PERMISSIONS = [
     "platform_access",
@@ -37,18 +25,15 @@ ALL_PERMISSIONS = [
     "manage_users",
     "plantao_access",
     "manage_plantao",
+    # Sub-permissões granulares do Plantão (implicadas por manage_plantao)
+    "plantao_gerir_escalas",
+    "plantao_aprovar_candidaturas",
+    "plantao_aprovar_cadastros",
+    "plantao_ver_relatorios",
 ]
 
 DEFAULT_ROLE_PERMISSIONS: dict[str, dict[str, bool]] = {
-    "admin": {
-        "platform_access": True,
-        "labmonitor_access": True,
-        "manage_labmonitor": True,
-        "ops_tools": True,
-        "manage_users": True,
-        "plantao_access": True,
-        "manage_plantao": True,
-    },
+    "admin": {permission: True for permission in ALL_PERMISSIONS},
     "operator": {
         "platform_access": True,
         "labmonitor_access": True,
@@ -57,6 +42,10 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, dict[str, bool]] = {
         "manage_users": False,
         "plantao_access": True,
         "manage_plantao": True,
+        "plantao_gerir_escalas": True,
+        "plantao_aprovar_candidaturas": True,
+        "plantao_aprovar_cadastros": True,
+        "plantao_ver_relatorios": True,
     },
     "viewer": {
         "platform_access": True,
@@ -66,43 +55,55 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, dict[str, bool]] = {
         "manage_users": False,
         "plantao_access": False,
         "manage_plantao": False,
+        "plantao_gerir_escalas": False,
+        "plantao_aprovar_candidaturas": False,
+        "plantao_aprovar_cadastros": False,
+        "plantao_ver_relatorios": False,
     },
-    # Categorias externas
     "veterinario": {
-        "platform_access": True,
+        "platform_access": False,
         "labmonitor_access": False,
         "manage_labmonitor": False,
         "ops_tools": False,
         "manage_users": False,
         "plantao_access": True,
         "manage_plantao": False,
+        "plantao_gerir_escalas": False,
+        "plantao_aprovar_candidaturas": False,
+        "plantao_aprovar_cadastros": False,
+        "plantao_ver_relatorios": False,
     },
     "auxiliar": {
-        "platform_access": True,
+        "platform_access": False,
         "labmonitor_access": False,
         "manage_labmonitor": False,
         "ops_tools": False,
         "manage_users": False,
         "plantao_access": True,
         "manage_plantao": False,
+        "plantao_gerir_escalas": False,
+        "plantao_aprovar_candidaturas": False,
+        "plantao_aprovar_cadastros": False,
+        "plantao_ver_relatorios": False,
     },
     "colaborador": {
-        "platform_access": True,
+        "platform_access": False,
         "labmonitor_access": False,
         "manage_labmonitor": False,
         "ops_tools": False,
         "manage_users": False,
         "plantao_access": False,
         "manage_plantao": False,
+        "plantao_gerir_escalas": False,
+        "plantao_aprovar_candidaturas": False,
+        "plantao_aprovar_cadastros": False,
+        "plantao_ver_relatorios": False,
     },
 }
 
-# Roles que são categorias de auto-cadastro (externas)
 EXTERNAL_ROLES = {"veterinario", "auxiliar", "colaborador"}
-# Roles internos (criados por admin)
 INTERNAL_ROLES = {"admin", "operator", "viewer"}
 
-# Labels amigáveis para exibição
 ROLE_LABELS: dict[str, str] = {
     "admin": "Administrador",
     "operator": "Operador",
@@ -112,7 +113,6 @@ ROLE_LABELS: dict[str, str] = {
     "colaborador": "Colaborador",
 }
 
-# Rate limiting
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 30
 
@@ -120,6 +120,118 @@ DEFAULT_GLOBAL_THRESHOLDS: dict[str, float] = {
     "warning_multiplier": 1.0,
     "critical_multiplier": 1.2,
 }
+
+metadata = MetaData()
+
+_t_app_kv = Table(
+    "app_kv",
+    metadata,
+    Column("key", Text, primary_key=True),
+    Column("value", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+_t_users = Table(
+    "users",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", Text, nullable=False, unique=True),
+    Column("password_hash", Text, nullable=False),
+    Column("role", Text, nullable=False, server_default="viewer"),
+    Column("is_active", Integer, nullable=False, server_default="1"),
+    Column("force_password_change", Integer, nullable=False, server_default="0"),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Column("nome", Text, nullable=False, server_default=""),
+    Column("telefone", Text, nullable=False, server_default=""),
+    Column("crmv", Text, nullable=False, server_default=""),
+    Column("status", Text, nullable=False, server_default="ativo"),
+    Column("tentativas_login", Integer, nullable=False, server_default="0"),
+    Column("bloqueado_ate", Text, nullable=True),
+    Column("profile_id", Integer, nullable=True),
+)
+
+_t_user_sessions = Table(
+    "user_sessions",
+    metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column("user_id", Integer, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+)
+
+_t_telegram_subscriptions = Table(
+    "telegram_subscriptions",
+    metadata,
+    Column("chat_id", Text, primary_key=True),
+    Column("name", Text, nullable=False, server_default=""),
+    Column("username", Text, nullable=False, server_default=""),
+    Column("subscribed_at", Text, nullable=False, server_default=""),
+)
+
+_t_lab_snapshots = Table(
+    "lab_snapshots",
+    metadata,
+    Column("lab_id", Text, primary_key=True),
+    Column("snapshot_json", Text, nullable=False),
+    Column("last_check", Text, nullable=False, server_default=""),
+    Column("last_error", Text, nullable=False, server_default=""),
+    Column("updated_at", Text, nullable=False),
+)
+
+_t_notification_event_log = Table(
+    "notification_event_log",
+    metadata,
+    Column("signature", Text, primary_key=True),
+    Column("kind", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+)
+
+_t_exam_thresholds = Table(
+    "exam_thresholds",
+    metadata,
+    Column("exam_slug", Text, primary_key=True),
+    Column("display_name", Text, nullable=False),
+    Column("warning_multiplier", Float, nullable=False),
+    Column("critical_multiplier", Float, nullable=False),
+    Column("updated_at", Text, nullable=False),
+    Column("updated_by", Text, nullable=False, server_default=""),
+)
+
+_t_sync_runs = Table(
+    "sync_runs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lab_id", Text, nullable=False),
+    Column("started_at", Text, nullable=False),
+    Column("finished_at", Text, nullable=True),
+    Column("success", Integer, nullable=True),
+    Column("error", Text, nullable=True),
+)
+
+_t_module_logs = Table(
+    "module_logs",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("module", Text, nullable=False),
+    Column("level", Text, nullable=False),
+    Column("message", Text, nullable=False),
+    Column("payload_json", Text, nullable=True),
+    Column("created_at", Text, nullable=False),
+)
+
+_t_platform_profiles = Table(
+    "platform_profiles",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("nome", Text, nullable=False),
+    Column("descricao", Text, nullable=False, server_default=""),
+    Column("base_role", Text, nullable=False),
+    Column("permissions_json", Text, nullable=False, server_default="{}"),
+    Column("is_system", Integer, nullable=False, server_default="0"),
+    Column("criado_em", Text, nullable=False),
+    Column("alterado_em", Text, nullable=False),
+)
 
 
 def _utcnow() -> str:
@@ -139,13 +251,12 @@ def _json_loads(value: str | None, default: Any) -> Any:
         return default
 
 
-def _slugify_exam(text: str) -> str:
+def _slugify_exam(text_: str) -> str:
     import re
     import unicodedata
 
     normalized = "".join(
-        c for c in unicodedata.normalize("NFD", text or "")
-        if unicodedata.category(c) != "Mn"
+        c for c in unicodedata.normalize("NFD", text_ or "") if unicodedata.category(c) != "Mn"
     ).lower()
     normalized = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
     return normalized or "exam"
@@ -154,101 +265,57 @@ def _slugify_exam(text: str) -> str:
 class PlatformStore:
     def __init__(self):
         self._lock = threading.RLock()
-        self._db_path = settings.db_path
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_url = settings.database_url
+        is_sqlite = db_url.startswith("sqlite")
+        connect_args: dict[str, Any] = {}
+        if is_sqlite:
+            connect_args["check_same_thread"] = False
+            self._engine = create_engine(db_url, connect_args=connect_args, poolclass=NullPool)
+        else:
+            self._engine = create_engine(db_url, pool_pre_ping=True)
+
+        if is_sqlite:
+
+            @event.listens_for(self._engine, "connect")
+            def _set_sqlite_pragmas(dbapi_conn, _record):
+                cur = dbapi_conn.cursor()
+                cur.execute("PRAGMA journal_mode=WAL")
+                cur.execute("PRAGMA synchronous=NORMAL")
+                cur.execute("PRAGMA foreign_keys=ON")
+                cur.close()
+
         self.init_db()
         self.bootstrap_legacy_runtime()
         self.ensure_master_user()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=30, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = NORMAL")
-        return conn
+    @property
+    def engine(self):
+        return self._engine
 
     def init_db(self) -> None:
-        schema = """
-        CREATE TABLE IF NOT EXISTS app_kv (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
+        metadata.create_all(self._engine)
+        self._ensure_schema_compatibility()
 
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'viewer',
-            is_active INTEGER NOT NULL DEFAULT 1,
-            force_password_change INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            nome TEXT NOT NULL DEFAULT '',
-            telefone TEXT NOT NULL DEFAULT '',
-            crmv TEXT NOT NULL DEFAULT '',
-            status TEXT NOT NULL DEFAULT 'ativo',
-            tentativas_login INTEGER NOT NULL DEFAULT 0,
-            bloqueado_ate TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS user_sessions (
-            token_hash TEXT PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS telegram_subscriptions (
-            chat_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL DEFAULT '',
-            username TEXT NOT NULL DEFAULT '',
-            subscribed_at TEXT NOT NULL DEFAULT ''
-        );
-
-        CREATE TABLE IF NOT EXISTS lab_snapshots (
-            lab_id TEXT PRIMARY KEY,
-            snapshot_json TEXT NOT NULL,
-            last_check TEXT NOT NULL DEFAULT '',
-            last_error TEXT NOT NULL DEFAULT '',
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS notification_event_log (
-            signature TEXT PRIMARY KEY,
-            kind TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS exam_thresholds (
-            exam_slug TEXT PRIMARY KEY,
-            display_name TEXT NOT NULL,
-            warning_multiplier REAL NOT NULL,
-            critical_multiplier REAL NOT NULL,
-            updated_at TEXT NOT NULL,
-            updated_by TEXT NOT NULL DEFAULT ''
-        );
-        """
-        with self._connect() as conn:
-            conn.executescript(schema)
-            # Colunas adicionadas incrementalmente — idempotentes
-            for alter in [
-                "ALTER TABLE users ADD COLUMN nome TEXT NOT NULL DEFAULT ''",
-                "ALTER TABLE users ADD COLUMN telefone TEXT NOT NULL DEFAULT ''",
-                "ALTER TABLE users ADD COLUMN crmv TEXT NOT NULL DEFAULT ''",
-                "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'ativo'",
-                "ALTER TABLE users ADD COLUMN tentativas_login INTEGER NOT NULL DEFAULT 0",
-                "ALTER TABLE users ADD COLUMN bloqueado_ate TEXT",
-                # Mantida por compatibilidade legada — não é mais usada para auth
-                "ALTER TABLE users ADD COLUMN gestor_plantao INTEGER NOT NULL DEFAULT 0",
-            ]:
-                try:
-                    conn.execute(alter)
-                    conn.commit()
-                except Exception:
-                    pass  # coluna já existe
+    def _ensure_schema_compatibility(self) -> None:
+        inspector = inspect(self._engine)
+        if "users" not in inspector.get_table_names():
+            return
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        missing = {
+            "nome": "TEXT NOT NULL DEFAULT ''",
+            "telefone": "TEXT NOT NULL DEFAULT ''",
+            "crmv": "TEXT NOT NULL DEFAULT ''",
+            "status": "TEXT NOT NULL DEFAULT 'ativo'",
+            "tentativas_login": "INTEGER NOT NULL DEFAULT 0",
+            "bloqueado_ate": "TEXT",
+            "profile_id": "INTEGER",
+        }
+        with self._engine.begin() as conn:
+            for column_name, ddl in missing.items():
+                if column_name in columns:
+                    continue
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {column_name} {ddl}"))
+        self._seed_system_profiles()
 
     def bootstrap_legacy_runtime(self) -> None:
         if self.load_runtime_config() is None and CONFIG_FILE.exists():
@@ -277,11 +344,12 @@ class PlatformStore:
                         subscribed_at=entry.get("subscribed_at", ""),
                     )
 
-    # ── Config / KV ──────────────────────────────────────────────────────────
-
     def load_json_setting(self, key: str, default: Any = None) -> Any:
-        with self._connect() as conn:
-            row = conn.execute("SELECT value FROM app_kv WHERE key = ?", (key,)).fetchone()
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT value FROM app_kv WHERE key = :key"),
+                {"key": key},
+            ).mappings().first()
         if not row:
             return default
         return _json_loads(row["value"], default)
@@ -289,24 +357,20 @@ class PlatformStore:
     def save_json_setting(self, key: str, value: Any) -> None:
         payload = _json_dumps(value)
         now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO app_kv(key, value, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
-                """,
-                (key, payload, now),
+                text(
+                    "INSERT INTO app_kv(key, value, updated_at) VALUES (:key, :value, :updated_at) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at"
+                ),
+                {"key": key, "value": payload, "updated_at": now},
             )
-            conn.commit()
 
     def load_runtime_config(self) -> dict | None:
         return self.load_json_setting("lab_monitor.runtime_config")
 
     def save_runtime_config(self, config: dict) -> None:
         self.save_json_setting("lab_monitor.runtime_config", config)
-
-    # ── Permissões ────────────────────────────────────────────────────────────
 
     def list_roles(self) -> list[str]:
         return list(DEFAULT_ROLE_PERMISSIONS.keys())
@@ -317,8 +381,8 @@ class PlatformStore:
         for role, defaults in DEFAULT_ROLE_PERMISSIONS.items():
             persisted = current.get(role) if isinstance(current, dict) else {}
             result[role] = {
-                key: bool((persisted or {}).get(key, default))
-                for key, default in defaults.items()
+                permission: bool((persisted or {}).get(permission, default))
+                for permission, default in defaults.items()
             }
         return result
 
@@ -327,33 +391,45 @@ class PlatformStore:
         if role not in DEFAULT_ROLE_PERMISSIONS:
             raise ValueError(f"role desconhecido: {role}")
         matrix = self.get_role_permissions()
-        matrix[role] = {
-            key: bool(permissions.get(key, False))
-            for key in ALL_PERMISSIONS
-        }
+        matrix[role] = {permission: bool(permissions.get(permission, False)) for permission in ALL_PERMISSIONS}
         if role == "admin":
-            matrix[role] = {key: True for key in ALL_PERMISSIONS}
+            matrix[role] = {permission: True for permission in ALL_PERMISSIONS}
         self.save_json_setting("platform.role_permissions", matrix)
 
     def get_user_permissions(self, user: dict | None) -> dict[str, bool]:
-        """Retorna o conjunto de permissões efetivas de um usuário."""
+        """Resolve permissões com cascata: role-default → perfil → permissões individuais."""
         if not user:
-            return {k: False for k in ALL_PERMISSIONS}
-        matrix = self.get_role_permissions()
+            return {permission: False for permission in ALL_PERMISSIONS}
         role = (user.get("role") or "viewer").strip().lower()
-        role_permissions = matrix.get(role) or {}
-        return {key: bool(role_permissions.get(key, False)) for key in ALL_PERMISSIONS}
-
-    # ── Thresholds ────────────────────────────────────────────────────────────
+        # 1. Base: permissões do role padrão
+        matrix = self.get_role_permissions()
+        resolved = dict(matrix.get(role) or {})
+        # 2. Sobrescreve com permissões do perfil customizado (se houver)
+        profile_id = user.get("profile_id")
+        if profile_id:
+            profile = self.get_profile(profile_id)
+            if profile and not profile["is_system"]:
+                for perm, val in profile["permissions"].items():
+                    resolved[perm] = bool(val)
+        result = {permission: bool(resolved.get(permission, False)) for permission in ALL_PERMISSIONS}
+        # manage_plantao implica todas as sub-permissões granulares do módulo Plantão
+        if result.get("manage_plantao"):
+            for sub in ("plantao_gerir_escalas", "plantao_aprovar_candidaturas", "plantao_aprovar_cadastros", "plantao_ver_relatorios"):
+                result[sub] = True
+        return result
 
     def get_global_thresholds(self) -> dict[str, float]:
         current = self.load_json_setting("lab_monitor.global_thresholds", {}) or {}
         try:
-            warning = float(current.get("warning_multiplier", DEFAULT_GLOBAL_THRESHOLDS["warning_multiplier"]))
+            warning = float(
+                current.get("warning_multiplier", DEFAULT_GLOBAL_THRESHOLDS["warning_multiplier"])
+            )
         except Exception:
             warning = DEFAULT_GLOBAL_THRESHOLDS["warning_multiplier"]
         try:
-            critical = float(current.get("critical_multiplier", DEFAULT_GLOBAL_THRESHOLDS["critical_multiplier"]))
+            critical = float(
+                current.get("critical_multiplier", DEFAULT_GLOBAL_THRESHOLDS["critical_multiplier"])
+            )
         except Exception:
             critical = DEFAULT_GLOBAL_THRESHOLDS["critical_multiplier"]
         critical = max(critical, warning)
@@ -368,8 +444,6 @@ class PlatformStore:
             },
         )
 
-    # ── Lab snapshots ─────────────────────────────────────────────────────────
-
     def get_lab_sync_state(self, lab_id: str) -> dict:
         return self.load_json_setting(f"lab_monitor.sync_state.{lab_id}", {}) or {}
 
@@ -380,10 +454,10 @@ class PlatformStore:
         snapshots: dict[str, dict] = {}
         last_check: dict[str, str] = {}
         last_error: dict[str, str] = {}
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             rows = conn.execute(
-                "SELECT lab_id, snapshot_json, last_check, last_error FROM lab_snapshots"
-            ).fetchall()
+                text("SELECT lab_id, snapshot_json, last_check, last_error FROM lab_snapshots")
+            ).mappings().all()
         for row in rows:
             snapshots[row["lab_id"]] = _json_loads(row["snapshot_json"], {})
             if row["last_check"]:
@@ -394,61 +468,69 @@ class PlatformStore:
 
     def save_lab_snapshot(self, lab_id: str, snapshot: dict, *, last_check: str = "", last_error: str = "") -> None:
         now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO lab_snapshots(lab_id, snapshot_json, last_check, last_error, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(lab_id) DO UPDATE SET
-                    snapshot_json=excluded.snapshot_json,
-                    last_check=excluded.last_check,
-                    last_error=excluded.last_error,
-                    updated_at=excluded.updated_at
-                """,
-                (lab_id, _json_dumps(snapshot), last_check, last_error, now),
+                text(
+                    "INSERT INTO lab_snapshots(lab_id, snapshot_json, last_check, last_error, updated_at) "
+                    "VALUES (:lab_id, :snapshot_json, :last_check, :last_error, :updated_at) "
+                    "ON CONFLICT(lab_id) DO UPDATE SET "
+                    "snapshot_json=excluded.snapshot_json, "
+                    "last_check=excluded.last_check, "
+                    "last_error=excluded.last_error, "
+                    "updated_at=excluded.updated_at"
+                ),
+                {
+                    "lab_id": lab_id,
+                    "snapshot_json": _json_dumps(snapshot),
+                    "last_check": last_check,
+                    "last_error": last_error,
+                    "updated_at": now,
+                },
             )
-            conn.commit()
-
-    # ── Notificações de eventos ───────────────────────────────────────────────
 
     def remember_notification_event(self, signature: str, kind: str, ttl_hours: int = 72) -> bool:
         cutoff = (datetime.utcnow() - timedelta(hours=ttl_hours)).isoformat(timespec="seconds")
         now = _utcnow()
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM notification_event_log WHERE created_at < ?", (cutoff,))
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM notification_event_log WHERE created_at < :cutoff"),
+                {"cutoff": cutoff},
+            )
             exists = conn.execute(
-                "SELECT 1 FROM notification_event_log WHERE signature = ?", (signature,)
-            ).fetchone()
+                text("SELECT 1 FROM notification_event_log WHERE signature = :signature"),
+                {"signature": signature},
+            ).first()
             if exists:
-                conn.commit()
                 return False
             conn.execute(
-                "INSERT INTO notification_event_log(signature, kind, created_at) VALUES (?, ?, ?)",
-                (signature, kind, now),
+                text(
+                    "INSERT INTO notification_event_log(signature, kind, created_at) "
+                    "VALUES (:signature, :kind, :created_at)"
+                ),
+                {"signature": signature, "kind": kind, "created_at": now},
             )
-            conn.commit()
         return True
 
     def clear_notification_events(self) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM notification_event_log")
-            conn.commit()
-
-    # ── Usuários ──────────────────────────────────────────────────────────────
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(text("DELETE FROM notification_event_log"))
 
     def ensure_master_user(self) -> None:
-        email = settings.master_email.strip().lower()
+        if not settings.has_bootstrap_master:
+            return
+        email = settings.master_email
         existing = self.get_user_by_email(email)
         if existing:
-            # Garante que o master sempre está ativo e com role admin
-            if existing.get("status") != "ativo" or existing.get("role") != "admin":
-                now = _utcnow()
-                with self._lock, self._connect() as conn:
+            if existing.get("role") != "admin" or existing.get("status") != "ativo" or not existing.get("is_active"):
+                with self._lock, self._engine.begin() as conn:
                     conn.execute(
-                        "UPDATE users SET status='ativo', role='admin', updated_at=? WHERE email=?",
-                        (now, email),
+                        text(
+                            "UPDATE users "
+                            "SET role='admin', is_active=1, status='ativo', updated_at=:updated_at "
+                            "WHERE email=:email"
+                        ),
+                        {"updated_at": _utcnow(), "email": email},
                     )
-                    conn.commit()
             return
         self.create_user(
             email=email,
@@ -458,124 +540,126 @@ class PlatformStore:
             status="ativo",
         )
 
-    def _normalize_user(self, row: sqlite3.Row | None) -> dict | None:
+    def _normalize_user(self, row: Any) -> dict | None:
         if not row:
             return None
-        keys = list(row.keys()) if hasattr(row, "keys") else []
+        status = row.get("status")
+        if not status:
+            status = "ativo" if bool(row.get("is_active")) else "inativo"
+        role = row["role"]
         return {
             "id": row["id"],
             "email": row["email"],
-            "role": row["role"],
+            "role": role,
             "is_active": bool(row["is_active"]),
             "force_password_change": bool(row["force_password_change"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
-            "nome": row["nome"] if "nome" in keys else "",
-            "telefone": row["telefone"] if "telefone" in keys else "",
-            "crmv": row["crmv"] if "crmv" in keys else "",
-            "status": row["status"] if "status" in keys else "ativo",
-            "tentativas_login": row["tentativas_login"] if "tentativas_login" in keys else 0,
-            "bloqueado_ate": row["bloqueado_ate"] if "bloqueado_ate" in keys else None,
-            # Aliases de compatibilidade com o módulo Plantão (que usava plantao_perfis.tipo)
-            "tipo": row["role"],
-            # campo legado — mantido para não quebrar código existente
-            "gestor_plantao": bool(row["gestor_plantao"]) if "gestor_plantao" in keys else False,
+            "nome": row.get("nome", "") or "",
+            "telefone": row.get("telefone", "") or "",
+            "crmv": row.get("crmv", "") or "",
+            "status": status,
+            "tentativas_login": int(row.get("tentativas_login") or 0),
+            "bloqueado_ate": row.get("bloqueado_ate"),
+            "profile_id": row.get("profile_id"),
+            "tipo": role,
+            "gestor_plantao": role in {"admin", "operator"},
         }
 
     def list_users(self) -> list[dict]:
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM users ORDER BY nome ASC, email ASC"
-            ).fetchall()
+        with self._engine.connect() as conn:
+            rows = conn.execute(text("SELECT * FROM users ORDER BY nome ASC, email ASC")).mappings().all()
         return [self._normalize_user(row) for row in rows]
 
     def list_pending_users(self) -> list[dict]:
-        """Retorna usuários com status='pendente' aguardando aprovação."""
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM users WHERE status = 'pendente' ORDER BY created_at ASC"
-            ).fetchall()
+                text("SELECT * FROM users WHERE status = 'pendente' ORDER BY created_at ASC")
+            ).mappings().all()
         return [self._normalize_user(row) for row in rows]
 
     def get_user_by_email(self, email: str) -> dict | None:
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM users WHERE email = ?",
-                (email.strip().lower(),),
-            ).fetchone()
+                text("SELECT * FROM users WHERE email = :email"),
+                {"email": email.strip().lower()},
+            ).mappings().first()
         return self._normalize_user(row)
 
     def get_user_by_id(self, user_id: int) -> dict | None:
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM users WHERE id = ?",
-                (user_id,),
-            ).fetchone()
+                text("SELECT * FROM users WHERE id = :user_id"),
+                {"user_id": user_id},
+            ).mappings().first()
         return self._normalize_user(row)
 
     def authenticate_user(self, email: str, password: str) -> tuple[dict | None, str]:
-        """
-        Autentica com rate limiting.
-
-        Returns (user, 'ok') ou (None, código_erro).
-        Códigos: 'invalid', 'locked', 'pending', 'rejected', 'inactive'
-        """
         now = _utcnow()
         email = email.strip().lower()
-
-        with self._lock, self._connect() as conn:
-            row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        with self._lock, self._engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT * FROM users WHERE email = :email"),
+                {"email": email},
+            ).mappings().first()
             if not row:
                 return None, "invalid"
 
-            perfil = {k: row[k] for k in row.keys()}
-
-            # Verifica bloqueio
-            if perfil.get("bloqueado_ate") and perfil["bloqueado_ate"] > now:
+            if row.get("bloqueado_ate") and row["bloqueado_ate"] > now:
                 return None, "locked"
-            if perfil.get("bloqueado_ate") and perfil["bloqueado_ate"] <= now:
+            if row.get("bloqueado_ate") and row["bloqueado_ate"] <= now:
                 conn.execute(
-                    "UPDATE users SET tentativas_login=0, bloqueado_ate=NULL WHERE id=?",
-                    (perfil["id"],),
+                    text(
+                        "UPDATE users "
+                        "SET tentativas_login=0, bloqueado_ate=NULL, updated_at=:updated_at "
+                        "WHERE id=:user_id"
+                    ),
+                    {"updated_at": now, "user_id": row["id"]},
                 )
-                conn.commit()
-                perfil["tentativas_login"] = 0
-                perfil["bloqueado_ate"] = None
+                row["tentativas_login"] = 0
+                row["bloqueado_ate"] = None
 
-            # Verifica senha
-            if not verify_password(password, perfil["password_hash"]):
-                tentativas = (perfil.get("tentativas_login") or 0) + 1
+            if not verify_password(password, row["password_hash"]):
+                tentativas = int(row.get("tentativas_login") or 0) + 1
                 bloqueado_ate = None
                 if tentativas >= MAX_LOGIN_ATTEMPTS:
                     bloqueado_ate = (
                         datetime.utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
                     ).isoformat(timespec="seconds")
                 conn.execute(
-                    "UPDATE users SET tentativas_login=?, bloqueado_ate=?, updated_at=? WHERE id=?",
-                    (tentativas, bloqueado_ate, now, perfil["id"]),
+                    text(
+                        "UPDATE users "
+                        "SET tentativas_login=:tentativas_login, bloqueado_ate=:bloqueado_ate, updated_at=:updated_at "
+                        "WHERE id=:user_id"
+                    ),
+                    {
+                        "tentativas_login": tentativas,
+                        "bloqueado_ate": bloqueado_ate,
+                        "updated_at": now,
+                        "user_id": row["id"],
+                    },
                 )
-                conn.commit()
                 return None, "invalid"
 
-            # Senha OK — zera tentativas
             conn.execute(
-                "UPDATE users SET tentativas_login=0, bloqueado_ate=NULL, updated_at=? WHERE id=?",
-                (now, perfil["id"]),
+                text(
+                    "UPDATE users "
+                    "SET tentativas_login=0, bloqueado_ate=NULL, updated_at=:updated_at "
+                    "WHERE id=:user_id"
+                ),
+                {"updated_at": now, "user_id": row["id"]},
             )
-            conn.commit()
 
-        if not perfil.get("is_active"):
+        if not row.get("is_active"):
             return None, "inactive"
-        status = perfil.get("status", "ativo")
+        status = row.get("status") or "ativo"
         if status == "pendente":
             return None, "pending"
         if status == "rejeitado":
             return None, "rejected"
         if status != "ativo":
             return None, "inactive"
-
-        user = self.get_user_by_email(email)
-        return user, "ok"
+        return self.get_user_by_email(email), "ok"
 
     def create_user(
         self,
@@ -591,27 +675,30 @@ class PlatformStore:
     ) -> dict:
         now = _utcnow()
         email = email.strip().lower()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO users(email, password_hash, role, is_active, force_password_change,
-                                  created_at, updated_at, nome, telefone, crmv, status)
-                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    email,
-                    hash_password(password),
-                    role,
-                    1 if force_password_change else 0,
-                    now,
-                    now,
-                    nome.strip(),
-                    telefone.strip(),
-                    crmv.strip(),
-                    status,
+                text(
+                    "INSERT INTO users("
+                    "email, password_hash, role, is_active, force_password_change, created_at, updated_at, "
+                    "nome, telefone, crmv, status, tentativas_login, bloqueado_ate"
+                    ") VALUES ("
+                    ":email, :password_hash, :role, :is_active, :force_password_change, :created_at, :updated_at, "
+                    ":nome, :telefone, :crmv, :status, 0, NULL)"
                 ),
+                {
+                    "email": email,
+                    "password_hash": hash_password(password),
+                    "role": role,
+                    "is_active": 1 if status == "ativo" else 0,
+                    "force_password_change": 1 if force_password_change else 0,
+                    "created_at": now,
+                    "updated_at": now,
+                    "nome": nome.strip(),
+                    "telefone": telefone.strip(),
+                    "crmv": crmv.strip(),
+                    "status": status,
+                },
             )
-            conn.commit()
         return self.get_user_by_email(email) or {}
 
     def create_user_request(
@@ -624,10 +711,6 @@ class PlatformStore:
         telefone: str = "",
         crmv: str = "",
     ) -> dict:
-        """
-        Cria um usuário via auto-cadastro público com status='pendente'.
-        Levanta ValueError se o e-mail já estiver cadastrado.
-        """
         email = email.strip().lower()
         existing = self.get_user_by_email(email)
         if existing:
@@ -645,73 +728,220 @@ class PlatformStore:
         )
 
     def approve_user(self, user_id: int, approved_by_id: int | None = None) -> None:
-        """Aprova um cadastro pendente, ativando o usuário."""
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "UPDATE users SET status='ativo', is_active=1, updated_at=? WHERE id=? AND status='pendente'",
-                (now, user_id),
+                text(
+                    "UPDATE users "
+                    "SET status='ativo', is_active=1, updated_at=:updated_at "
+                    "WHERE id=:user_id AND status='pendente'"
+                ),
+                {"updated_at": _utcnow(), "user_id": user_id},
             )
-            conn.commit()
 
     def reject_user(self, user_id: int, motivo: str = "") -> None:
-        """Rejeita um cadastro pendente."""
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "UPDATE users SET status='rejeitado', is_active=0, updated_at=? WHERE id=?",
-                (now, user_id),
+                text(
+                    "UPDATE users "
+                    "SET status='rejeitado', is_active=0, updated_at=:updated_at "
+                    "WHERE id=:user_id"
+                ),
+                {"updated_at": _utcnow(), "user_id": user_id},
             )
-            conn.commit()
 
     def set_user_password(self, user_id: int, password: str, *, force_password_change: bool = False) -> None:
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "UPDATE users SET password_hash=?, force_password_change=?, updated_at=? WHERE id=?",
-                (hash_password(password), 1 if force_password_change else 0, now, user_id),
+                text(
+                    "UPDATE users "
+                    "SET password_hash=:password_hash, force_password_change=:force_password_change, updated_at=:updated_at "
+                    "WHERE id=:user_id"
+                ),
+                {
+                    "password_hash": hash_password(password),
+                    "force_password_change": 1 if force_password_change else 0,
+                    "updated_at": _utcnow(),
+                    "user_id": user_id,
+                },
             )
-            conn.commit()
 
     def set_user_active(self, user_id: int, is_active: bool) -> None:
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        current = self.get_user_by_id(user_id)
+        if not current:
+            return
+        new_status = current.get("status") or "ativo"
+        if is_active and new_status in {"inativo", "rejeitado"}:
+            new_status = "ativo"
+        if not is_active and new_status == "ativo":
+            new_status = "inativo"
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "UPDATE users SET is_active=?, updated_at=? WHERE id=?",
-                (1 if is_active else 0, now, user_id),
+                text(
+                    "UPDATE users "
+                    "SET is_active=:is_active, status=:status, updated_at=:updated_at "
+                    "WHERE id=:user_id"
+                ),
+                {
+                    "is_active": 1 if is_active else 0,
+                    "status": new_status,
+                    "updated_at": _utcnow(),
+                    "user_id": user_id,
+                },
             )
-            conn.commit()
 
     def set_user_role(self, user_id: int, role: str) -> None:
         role = role.strip().lower()
         if role not in DEFAULT_ROLE_PERMISSIONS:
             raise ValueError(f"role desconhecido: {role}")
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "UPDATE users SET role=?, updated_at=? WHERE id=?",
-                (role, now, user_id),
+                text("UPDATE users SET role=:role, updated_at=:updated_at WHERE id=:user_id"),
+                {"role": role, "updated_at": _utcnow(), "user_id": user_id},
             )
-            conn.commit()
 
-    # ── Sessões ───────────────────────────────────────────────────────────────
+    # ── Perfis customizáveis ─────────────────────────────────────────────────
+
+    def _seed_system_profiles(self) -> None:
+        """Garante que os perfis padrão existam como is_system=1."""
+        now = _utcnow()
+        for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
+            label = ROLE_LABELS.get(role, role.capitalize())
+            with self._lock, self._engine.begin() as conn:
+                exists = conn.execute(
+                    text("SELECT id FROM platform_profiles WHERE base_role=:role AND is_system=1"),
+                    {"role": role},
+                ).first()
+                if not exists:
+                    conn.execute(
+                        text(
+                            "INSERT INTO platform_profiles(nome, descricao, base_role, permissions_json, is_system, criado_em, alterado_em) "
+                            "VALUES (:nome, :descricao, :base_role, :permissions_json, 1, :criado_em, :alterado_em)"
+                        ),
+                        {
+                            "nome": label,
+                            "descricao": f"Perfil padrão de sistema: {label}",
+                            "base_role": role,
+                            "permissions_json": _json_dumps(perms),
+                            "criado_em": now,
+                            "alterado_em": now,
+                        },
+                    )
+
+    def list_profiles(self) -> list[dict]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT * FROM platform_profiles ORDER BY is_system DESC, nome ASC")
+            ).mappings().all()
+        return [self._normalize_profile(r) for r in rows]
+
+    def get_profile(self, profile_id: int) -> dict | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT * FROM platform_profiles WHERE id=:id"),
+                {"id": profile_id},
+            ).mappings().first()
+        return self._normalize_profile(row) if row else None
+
+    def _normalize_profile(self, row: Any) -> dict:
+        return {
+            "id": row["id"],
+            "nome": row["nome"],
+            "descricao": row.get("descricao", "") or "",
+            "base_role": row["base_role"],
+            "permissions": _json_loads(row.get("permissions_json"), {}),
+            "is_system": bool(row["is_system"]),
+            "criado_em": row.get("criado_em", ""),
+            "alterado_em": row.get("alterado_em", ""),
+        }
+
+    def create_profile(self, *, nome: str, descricao: str, base_role: str, permissions: dict) -> dict:
+        if base_role not in DEFAULT_ROLE_PERMISSIONS:
+            raise ValueError(f"base_role inválido: {base_role}")
+        now = _utcnow()
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO platform_profiles(nome, descricao, base_role, permissions_json, is_system, criado_em, alterado_em) "
+                    "VALUES (:nome, :descricao, :base_role, :permissions_json, 0, :now, :now)"
+                ),
+                {
+                    "nome": nome.strip(),
+                    "descricao": descricao.strip(),
+                    "base_role": base_role,
+                    "permissions_json": _json_dumps(permissions),
+                    "now": now,
+                },
+            )
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT * FROM platform_profiles WHERE nome=:nome AND is_system=0 ORDER BY id DESC LIMIT 1"),
+                {"nome": nome.strip()},
+            ).mappings().first()
+        return self._normalize_profile(row)
+
+    def update_profile(self, profile_id: int, *, nome: str, descricao: str, permissions: dict) -> None:
+        profile = self.get_profile(profile_id)
+        if not profile:
+            raise ValueError("Perfil não encontrado.")
+        if profile["is_system"]:
+            raise ValueError("Perfis de sistema não podem ser editados.")
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE platform_profiles SET nome=:nome, descricao=:descricao, "
+                    "permissions_json=:permissions_json, alterado_em=:now WHERE id=:id"
+                ),
+                {
+                    "nome": nome.strip(),
+                    "descricao": descricao.strip(),
+                    "permissions_json": _json_dumps(permissions),
+                    "now": _utcnow(),
+                    "id": profile_id,
+                },
+            )
+
+    def delete_profile(self, profile_id: int) -> None:
+        profile = self.get_profile(profile_id)
+        if not profile:
+            return
+        if profile["is_system"]:
+            raise ValueError("Perfis de sistema não podem ser excluídos.")
+        with self._lock, self._engine.begin() as conn:
+            # Desvincula usuários deste perfil antes de deletar
+            conn.execute(
+                text("UPDATE users SET profile_id=NULL WHERE profile_id=:id"),
+                {"id": profile_id},
+            )
+            conn.execute(
+                text("DELETE FROM platform_profiles WHERE id=:id"),
+                {"id": profile_id},
+            )
+
+    def assign_user_profile(self, user_id: int, profile_id: int | None) -> None:
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("UPDATE users SET profile_id=:profile_id, updated_at=:now WHERE id=:user_id"),
+                {"profile_id": profile_id, "now": _utcnow(), "user_id": user_id},
+            )
 
     def create_session(self, user_id: int) -> str:
         raw = secrets.token_urlsafe(32)
         hashed = token_hash(raw)
         now = datetime.utcnow()
         expires = now + timedelta(days=settings.session_ttl_days)
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                "INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-                (
-                    hashed,
-                    user_id,
-                    now.isoformat(timespec="seconds"),
-                    expires.isoformat(timespec="seconds"),
+                text(
+                    "INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at) "
+                    "VALUES (:token_hash, :user_id, :created_at, :expires_at)"
                 ),
+                {
+                    "token_hash": hashed,
+                    "user_id": user_id,
+                    "created_at": now.isoformat(timespec="seconds"),
+                    "expires_at": expires.isoformat(timespec="seconds"),
+                },
             )
-            conn.commit()
         return raw
 
     def get_user_for_session(self, raw_token: str | None) -> dict | None:
@@ -719,22 +949,23 @@ class PlatformStore:
             return None
         now = datetime.utcnow().isoformat(timespec="seconds")
         hashed = token_hash(raw_token)
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM user_sessions WHERE expires_at < ?", (now,))
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM user_sessions WHERE expires_at < :now"),
+                {"now": now},
+            )
             row = conn.execute(
-                """
-                SELECT u.*
-                  FROM user_sessions s
-                  JOIN users u ON u.id = s.user_id
-                 WHERE s.token_hash = ?
-                """,
-                (hashed,),
-            ).fetchone()
-            conn.commit()
+                text(
+                    "SELECT u.* "
+                    "FROM user_sessions s "
+                    "JOIN users u ON u.id = s.user_id "
+                    "WHERE s.token_hash = :token_hash"
+                ),
+                {"token_hash": hashed},
+            ).mappings().first()
         user = self._normalize_user(row)
         if not user:
             return None
-        # Só permite sessão para usuários ativos e aprovados
         if not user["is_active"] or user.get("status") != "ativo":
             return None
         return user
@@ -742,116 +973,137 @@ class PlatformStore:
     def revoke_session(self, raw_token: str | None) -> None:
         if not raw_token:
             return
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM user_sessions WHERE token_hash = ?", (token_hash(raw_token),))
-            conn.commit()
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM user_sessions WHERE token_hash = :token_hash"),
+                {"token_hash": token_hash(raw_token)},
+            )
 
     def revoke_all_sessions(self, user_id: int) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
-            conn.commit()
-
-    # ── Telegram ──────────────────────────────────────────────────────────────
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM user_sessions WHERE user_id = :user_id"),
+                {"user_id": user_id},
+            )
 
     def list_telegram_users(self) -> list[dict]:
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             rows = conn.execute(
-                "SELECT chat_id, name, username, subscribed_at FROM telegram_subscriptions ORDER BY subscribed_at DESC, chat_id"
-            ).fetchall()
+                text(
+                    "SELECT chat_id, name, username, subscribed_at "
+                    "FROM telegram_subscriptions "
+                    "ORDER BY subscribed_at DESC, chat_id"
+                )
+            ).mappings().all()
         return [
-            {"chat_id": row["chat_id"], "name": row["name"], "username": row["username"], "subscribed_at": row["subscribed_at"]}
+            {
+                "chat_id": row["chat_id"],
+                "name": row["name"],
+                "username": row["username"],
+                "subscribed_at": row["subscribed_at"],
+            }
             for row in rows
         ]
 
     def add_telegram_user(self, chat_id: str, *, name: str = "", username: str = "", subscribed_at: str = "") -> bool:
-        existing = any(u["chat_id"] == str(chat_id) for u in self.list_telegram_users())
-        with self._lock, self._connect() as conn:
+        existing = any(user["chat_id"] == str(chat_id) for user in self.list_telegram_users())
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO telegram_subscriptions(chat_id, name, username, subscribed_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(chat_id) DO UPDATE SET
-                    name=excluded.name,
-                    username=excluded.username,
-                    subscribed_at=CASE
-                        WHEN telegram_subscriptions.subscribed_at = '' THEN excluded.subscribed_at
-                        ELSE telegram_subscriptions.subscribed_at
-                    END
-                """,
-                (str(chat_id), name, username, subscribed_at or datetime.now().strftime("%d/%m/%Y %H:%M")),
+                text(
+                    "INSERT INTO telegram_subscriptions(chat_id, name, username, subscribed_at) "
+                    "VALUES (:chat_id, :name, :username, :subscribed_at) "
+                    "ON CONFLICT(chat_id) DO UPDATE SET "
+                    "name=excluded.name, "
+                    "username=excluded.username, "
+                    "subscribed_at=CASE "
+                    "WHEN telegram_subscriptions.subscribed_at = '' THEN excluded.subscribed_at "
+                    "ELSE telegram_subscriptions.subscribed_at END"
+                ),
+                {
+                    "chat_id": str(chat_id),
+                    "name": name,
+                    "username": username,
+                    "subscribed_at": subscribed_at or datetime.now().strftime("%d/%m/%Y %H:%M"),
+                },
             )
-            conn.commit()
         return not existing
 
     def remove_telegram_user(self, chat_id: str) -> bool:
-        with self._lock, self._connect() as conn:
-            cur = conn.execute("DELETE FROM telegram_subscriptions WHERE chat_id = ?", (str(chat_id),))
-            conn.commit()
-        return cur.rowcount > 0
-
-    # ── Exam thresholds ───────────────────────────────────────────────────────
+        with self._lock, self._engine.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM telegram_subscriptions WHERE chat_id = :chat_id"),
+                {"chat_id": str(chat_id)},
+            )
+        return result.rowcount > 0
 
     def list_exam_thresholds(self) -> list[dict]:
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             rows = conn.execute(
-                "SELECT exam_slug, display_name, warning_multiplier, critical_multiplier, updated_at, updated_by FROM exam_thresholds ORDER BY display_name"
-            ).fetchall()
-        return [
-            {
-                "exam_slug": row["exam_slug"],
-                "display_name": row["display_name"],
-                "warning_multiplier": row["warning_multiplier"],
-                "critical_multiplier": row["critical_multiplier"],
-                "updated_at": row["updated_at"],
-                "updated_by": row["updated_by"],
-            }
-            for row in rows
-        ]
+                text(
+                    "SELECT exam_slug, display_name, warning_multiplier, critical_multiplier, updated_at, updated_by "
+                    "FROM exam_thresholds ORDER BY display_name"
+                )
+            ).mappings().all()
+        return [dict(row) for row in rows]
 
     def get_exam_threshold(self, exam_name: str) -> dict:
         slug = _slugify_exam(exam_name)
-        with self._connect() as conn:
+        with self._engine.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM exam_thresholds WHERE exam_slug = ?", (slug,)
-            ).fetchone()
+                text("SELECT * FROM exam_thresholds WHERE exam_slug = :exam_slug"),
+                {"exam_slug": slug},
+            ).mappings().first()
         defaults = self.get_global_thresholds()
         if not row:
             return {
-                "exam_slug": slug, "display_name": exam_name,
+                "exam_slug": slug,
+                "display_name": exam_name,
                 "warning_multiplier": defaults["warning_multiplier"],
                 "critical_multiplier": defaults["critical_multiplier"],
-                "updated_at": "", "updated_by": "",
+                "updated_at": "",
+                "updated_by": "",
             }
-        return {
-            "exam_slug": row["exam_slug"], "display_name": row["display_name"],
-            "warning_multiplier": row["warning_multiplier"],
-            "critical_multiplier": row["critical_multiplier"],
-            "updated_at": row["updated_at"], "updated_by": row["updated_by"],
-        }
+        return dict(row)
 
-    def upsert_exam_threshold(self, exam_name: str, *, warning_multiplier: float, critical_multiplier: float, updated_by: str = "") -> None:
+    def upsert_exam_threshold(
+        self,
+        exam_name: str,
+        *,
+        warning_multiplier: float,
+        critical_multiplier: float,
+        updated_by: str = "",
+    ) -> None:
         slug = _slugify_exam(exam_name)
-        now = _utcnow()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._engine.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO exam_thresholds(exam_slug, display_name, warning_multiplier, critical_multiplier, updated_at, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(exam_slug) DO UPDATE SET
-                    display_name=excluded.display_name,
-                    warning_multiplier=excluded.warning_multiplier,
-                    critical_multiplier=excluded.critical_multiplier,
-                    updated_at=excluded.updated_at,
-                    updated_by=excluded.updated_by
-                """,
-                (slug, exam_name, warning_multiplier, critical_multiplier, now, updated_by),
+                text(
+                    "INSERT INTO exam_thresholds("
+                    "exam_slug, display_name, warning_multiplier, critical_multiplier, updated_at, updated_by"
+                    ") VALUES ("
+                    ":exam_slug, :display_name, :warning_multiplier, :critical_multiplier, :updated_at, :updated_by"
+                    ") ON CONFLICT(exam_slug) DO UPDATE SET "
+                    "display_name=excluded.display_name, "
+                    "warning_multiplier=excluded.warning_multiplier, "
+                    "critical_multiplier=excluded.critical_multiplier, "
+                    "updated_at=excluded.updated_at, "
+                    "updated_by=excluded.updated_by"
+                ),
+                {
+                    "exam_slug": slug,
+                    "display_name": exam_name,
+                    "warning_multiplier": warning_multiplier,
+                    "critical_multiplier": critical_multiplier,
+                    "updated_at": _utcnow(),
+                    "updated_by": updated_by,
+                },
             )
-            conn.commit()
 
     def delete_exam_threshold(self, exam_slug: str) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute("DELETE FROM exam_thresholds WHERE exam_slug = ?", (exam_slug,))
-            conn.commit()
+        with self._lock, self._engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM exam_thresholds WHERE exam_slug = :exam_slug"),
+                {"exam_slug": exam_slug},
+            )
 
 
 store = PlatformStore()
