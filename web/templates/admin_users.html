@@ -47,7 +47,7 @@
             <p class="text-xs text-gray-500">{{ u.email }}</p>
             <div class="mt-1.5 flex flex-wrap gap-2">
               {% if u.role %}
-              <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+              <span class="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-pink">
                 {{ (role_labels or {})[u.role] or u.role }}
               </span>
               {% endif %}
@@ -102,7 +102,7 @@
             <span class="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">{{ p.nome }}</span>
             {% endif %}{% endfor %}
             {% else %}
-            <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+            <span class="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-pink">
               {{ role_labels.get(user.role, user.role) }}
             </span>
             {% endif %}

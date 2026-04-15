@@ -52,7 +52,7 @@
 
     {# Botão abrir painel de criação #}
     <button onclick="abrirPainelEscala()"
-            class="rounded-2xl bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-4 py-2 flex items-center gap-2">
+            class="rounded-2xl bg-brand-pink hover:bg-brand-dark text-white text-sm font-semibold px-4 py-2 flex items-center gap-2">
       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -85,7 +85,7 @@
         {# Número do dia + marcadores #}
         <div class="flex items-start justify-between gap-1 mb-1">
           <span class="text-sm font-semibold
-                       {% if cell.is_today %}text-rose-600
+                       {% if cell.is_today %}text-brand-pink
                        {% elif cell.is_past %}text-gray-300
                        {% elif cell.is_sunday %}text-orange-500
                        {% else %}text-gray-700{% endif %}">
@@ -121,7 +121,7 @@
         {# Botão de adicionar no dia — abre painel pré-preenchendo a data #}
         {% if not cell.is_past %}
         <button onclick="abrirPainelEscalaDia('{{ cell.date }}')"
-                class="absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-pink-100 text-gray-400 hover:text-pink-600 transition text-xs font-bold">
+                class="absolute bottom-1.5 right-1.5 h-5 w-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-light text-gray-400 hover:text-brand-pink transition text-xs font-bold">
           +
         </button>
         {% endif %}
@@ -219,7 +219,7 @@
     <div>
       <label class="flex items-center gap-2 cursor-pointer">
         <input id="campo-auto-approve" type="checkbox"
-               class="rounded border-gray-300 text-rose-600 focus:ring-rose-500">
+               class="rounded border-gray-300 text-brand-pink focus:ring-rose-500">
         <span class="text-xs font-medium text-gray-600">Auto-aprovar candidaturas nesta escala</span>
       </label>
     </div>
@@ -261,7 +261,7 @@
         <label class="flex items-center gap-1.5 cursor-pointer">
           <input type="checkbox" name="dias_semana_chk" value="{{ i }}"
                  onchange="gerarPreview()"
-                 class="rounded border-gray-300 text-rose-600 focus:ring-rose-500">
+                 class="rounded border-gray-300 text-brand-pink focus:ring-rose-500">
           <span class="text-xs font-medium {% if i == 6 %}text-orange-500{% else %}text-gray-600{% endif %}">{{ nome }}</span>
         </label>
         {% endfor %}
@@ -272,7 +272,7 @@
     <div id="preview-lote" class="hidden rounded-xl border border-gray-200 bg-gray-50 p-3">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs font-semibold text-gray-600">Preview</span>
-        <span id="preview-count" class="text-xs font-bold text-rose-600"></span>
+        <span id="preview-count" class="text-xs font-bold text-brand-pink"></span>
       </div>
       <div id="preview-lista" class="space-y-1 max-h-40 overflow-y-auto text-xs"></div>
     </div>
@@ -281,7 +281,7 @@
   {# Botão salvar #}
   <div class="px-6 py-4 mt-auto border-t border-gray-100 shrink-0">
     <button id="btn-criar-escala" onclick="salvarEscala()"
-            class="w-full rounded-2xl bg-pink-600 hover:bg-pink-700 text-white text-sm font-semibold px-4 py-3">
+            class="w-full rounded-2xl bg-brand-pink hover:bg-brand-dark text-white text-sm font-semibold px-4 py-3">
       Criar Escala
     </button>
   </div>
@@ -327,8 +327,8 @@ function setModo(modo) {
   modoAtual = modo;
   document.getElementById('campos-unica').classList.toggle('hidden', modo !== 'unica');
   document.getElementById('campos-lote').classList.toggle('hidden', modo !== 'lote');
-  document.getElementById('tab-unica').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'unica' ? 'bg-rose-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`;
-  document.getElementById('tab-lote').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'lote' ? 'bg-rose-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`;
+  document.getElementById('tab-unica').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'unica' ? 'bg-brand-pink text-white' : 'text-gray-600 hover:bg-gray-100'}`;
+  document.getElementById('tab-lote').className = `flex-1 px-4 py-2 transition text-sm font-medium ${modo === 'lote' ? 'bg-brand-pink text-white' : 'text-gray-600 hover:bg-gray-100'}`;
   document.getElementById('btn-criar-escala').textContent = modo === 'unica' ? 'Criar Escala' : 'Criar ' + (contarDatasLote() || '') + ' Escalas';
 }
 

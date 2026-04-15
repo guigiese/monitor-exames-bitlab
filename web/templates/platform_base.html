@@ -4,6 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{{ platform_name }}{% endblock %}</title>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              pink:  '#F0289B',
+              dark:  '#C52180',
+              light: '#FDE8F4',
+              blue:  '#28C8FF',
+            }
+          }
+        }
+      }
+    }
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   {% block extra_head %}{% endblock %}
@@ -12,7 +28,7 @@
   <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
     <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
       <a href="{% block home_href %}/{% endblock %}" class="flex min-w-0 items-center gap-3">
-        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500 text-sm font-bold text-white">
+        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-pink text-sm font-bold text-white">
           {% block header_icon %}PB{% endblock %}
         </span>
         <span class="min-w-0">
@@ -27,7 +43,7 @@
         <div class="relative" id="account-menu-wrapper">
           <button onclick="toggleAccountMenu()"
                   class="flex items-center gap-2 rounded-xl border border-gray-200 px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
-            <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-500 text-xs font-bold text-white select-none">
+            <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-pink text-xs font-bold text-white select-none">
               {{ platform_user.email[0] | upper }}
             </span>
             <span class="hidden max-w-[160px] truncate text-xs text-gray-500 md:block">{{ platform_user.email }}</span>
@@ -66,7 +82,7 @@
         </div>
         {% else %}
         <a href="/login"
-           class="rounded-xl bg-pink-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-pink-700">
+           class="rounded-xl bg-brand-pink px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-dark">
           Entrar
         </a>
         {% endif %}
