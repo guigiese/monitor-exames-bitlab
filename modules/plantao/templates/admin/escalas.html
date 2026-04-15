@@ -333,8 +333,8 @@ function setModo(modo) {
 }
 
 function abrirPainelEscala() {
-  document.getElementById('painel-escala').classList.remove('hidden');
-  document.getElementById('painel-overlay').classList.remove('hidden');
+  document.getElementById('painel-escala').style.display = 'flex';
+  document.getElementById('painel-overlay').style.display = 'block';
   setModo('unica');
 }
 
@@ -345,8 +345,8 @@ function abrirPainelEscalaDia(data) {
 }
 
 function fecharPainelEscala() {
-  document.getElementById('painel-escala').classList.add('hidden');
-  document.getElementById('painel-overlay').classList.add('hidden');
+  document.getElementById('painel-escala').style.display = 'none';
+  document.getElementById('painel-overlay').style.display = 'none';
 }
 
 // Verificação de feriado/domingo na data única
