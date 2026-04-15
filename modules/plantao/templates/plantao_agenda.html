@@ -297,7 +297,7 @@
 </div>{# fim x-data #}
 
 {# ── Painel lateral de detalhes do dia ── #}
-<div id="painel-dia" class="hidden fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-gray-200 flex flex-col">
+<div id="painel-dia" style="display:none" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-gray-200 flex flex-col">
   <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
     <h3 class="text-sm font-semibold text-gray-800" id="painel-titulo">Eventos do dia</h3>
     <button onclick="fecharDia()" class="text-gray-400 hover:text-gray-600">
@@ -310,10 +310,10 @@
     <p class="text-sm text-gray-400">Carregando...</p>
   </div>
 </div>
-<div id="painel-overlay" class="hidden fixed inset-0 z-40 bg-black/20" onclick="fecharDia()"></div>
+<div id="painel-overlay" style="display:none" class="fixed inset-0 z-40 bg-black/20" onclick="fecharDia()"></div>
 
 {# ── Modal de confirmação de desistência ── #}
-<div id="modal-desistir" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+<div id="modal-desistir" style="display:none" class="fixed inset-0 z-50 flex items-center justify-center p-4">
   <div class="absolute inset-0 bg-black/30" onclick="fecharDesistir()"></div>
   <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
     <h3 class="text-base font-semibold text-gray-900 mb-2">Desistir do plantão</h3>
@@ -458,24 +458,24 @@ function abrirDia(data) {
     }).join('');
   }
 
-  painel.classList.remove('hidden');
-  overlay.classList.remove('hidden');
+  painel.style.display = 'flex';
+  overlay.style.display = 'block';
 }
 
 function fecharDia() {
-  document.getElementById('painel-dia').classList.add('hidden');
-  document.getElementById('painel-overlay').classList.add('hidden');
+  document.getElementById('painel-dia').style.display = 'none';
+  document.getElementById('painel-overlay').style.display = 'none';
 }
 
 // Modal de confirmação de desistência
 function abrirDesistir(candidaturaId, turno) {
   document.getElementById('desistir-turno').textContent = turno;
   document.getElementById('form-desistir').action = `/plantao/candidaturas/${candidaturaId}/cancelar`;
-  document.getElementById('modal-desistir').classList.remove('hidden');
+  document.getElementById('modal-desistir').style.display = 'flex';
 }
 
 function fecharDesistir() {
-  document.getElementById('modal-desistir').classList.add('hidden');
+  document.getElementById('modal-desistir').style.display = 'none';
 }
 
 document.addEventListener('keydown', e => {
