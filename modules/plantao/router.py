@@ -390,26 +390,26 @@ def make_router(engine: Any) -> APIRouter:
     @router.get("/disponibilidade", response_class=HTMLResponse)
     async def disponibilidade_page(request: Request):
         from .queries import listar_sobreaviso_por_perfil, listar_datas_por_mes
-        import calendar as cal_mod
         from datetime import date as dt_date
-        _exige_plantonista(request)
-        perfil = _get_perfil(request)
+
+        perfil = _exige_plantonista(request)
+        if isinstance(perfil, RedirectResponse):
+            return perfil
+
         hoje = dt_date.today()
         ano, mes = hoje.year, hoje.month
         sobreavisos_abertos = listar_datas_por_mes(engine, ano, mes, None, tipo="sobreaviso", status="publicado")
         minhas_adesoes = listar_sobreaviso_por_perfil(engine, perfil["id"])
-        csrf_token = _csrf_token(request)
-        erro = request.query_params.get("erro")
-        ok = request.query_params.get("ok")
-        return templates.TemplateResponse(
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(
+            request,
             "plantao_sobreaviso.html",
-            {
-                "request": request, "csrf_token": csrf_token,
-                "perfil": perfil, "erro": erro, "ok": ok,
-                "sobreavisos_abertos": sobreavisos_abertos,
-                "minhas_adesoes": minhas_adesoes,
-                **_base_ctx(request),
-            },
+            csrf_token=csrf,
+            perfil=perfil,
+            erro=request.query_params.get("erro", ""),
+            ok=request.query_params.get("ok", ""),
+            sobreavisos_abertos=sobreavisos_abertos,
+            minhas_adesoes=minhas_adesoes,
         )
 
     @router.get("/escalas", response_class=HTMLResponse)
@@ -1231,7 +1231,8 @@ def make_router(engine: Any) -> APIRouter:
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         locais = listar_locais(engine, apenas_ativos=False)
-        return _render(request, "admin/locais.html", locais=locais, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(request, "admin/locais.html", locais=locais, csrf_token=csrf, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
 
     @router.post("/admin/locais/criar")
     async def admin_criar_local(
@@ -1262,7 +1263,8 @@ def make_router(engine: Any) -> APIRouter:
         if isinstance(gestor, RedirectResponse) or isinstance(gestor, HTMLResponse):
             return gestor
         tarifas = listar_tarifas_vigentes(engine, datetime.utcnow().date().isoformat())
-        return _render(request, "admin/tarifas.html", tarifas=tarifas, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(request, "admin/tarifas.html", tarifas=tarifas, csrf_token=csrf, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
 
     @router.post("/admin/tarifas/criar")
     async def admin_criar_tarifa(request: Request):
@@ -1300,7 +1302,8 @@ def make_router(engine: Any) -> APIRouter:
         hoje = datetime.utcnow().date()
         fim = hoje + timedelta(days=365)
         feriados = listar_feriados_por_periodo(engine, hoje.isoformat(), fim.isoformat())
-        return _render(request, "admin/feriados.html", feriados=feriados, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(request, "admin/feriados.html", feriados=feriados, csrf_token=csrf, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
 
     @router.post("/admin/feriados/criar")
     async def admin_criar_feriado(
@@ -1337,7 +1340,8 @@ def make_router(engine: Any) -> APIRouter:
             "plantao_api_key",
         ]
         cfg = {k: get_configuracao(engine, k, "") for k in chaves}
-        return _render(request, "admin/configuracoes.html", configuracoes=cfg, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
+        csrf = getattr(request.state, "csrf_token", "")
+        return _render(request, "admin/configuracoes.html", configuracoes=cfg, csrf_token=csrf, erro=request.query_params.get("erro", ""), ok=request.query_params.get("ok", ""))
 
     @router.post("/admin/configuracoes/salvar")
     async def admin_salvar_configuracoes(request: Request):

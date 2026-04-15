@@ -285,12 +285,14 @@ CREATE TABLE IF NOT EXISTS plantao_datas (
     hora_fim     TEXT NOT NULL,
     observacoes  TEXT NOT NULL DEFAULT '',
     status       TEXT NOT NULL DEFAULT 'rascunho',
+    auto_approve BOOLEAN NOT NULL DEFAULT FALSE,
     publicado_em TEXT,
     publicado_por INTEGER,
     criado_em    TEXT NOT NULL,
     alterado_em  TEXT NOT NULL,
     criado_por   INTEGER NOT NULL
 );
+ALTER TABLE plantao_datas ADD COLUMN IF NOT EXISTS auto_approve BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_plantao_datas_local_data ON plantao_datas(local_id, data);
 CREATE INDEX IF NOT EXISTS idx_plantao_datas_status ON plantao_datas(status);
 
@@ -404,9 +406,11 @@ CREATE TABLE IF NOT EXISTS plantao_datas (
     tipo TEXT NOT NULL DEFAULT 'presencial', subtipo TEXT NOT NULL DEFAULT 'regular',
     data TEXT NOT NULL, hora_inicio TEXT NOT NULL, hora_fim TEXT NOT NULL,
     observacoes TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'rascunho',
+    auto_approve INTEGER NOT NULL DEFAULT 0,
     publicado_em TEXT, publicado_por INTEGER, criado_em TEXT NOT NULL,
     alterado_em TEXT NOT NULL, criado_por INTEGER NOT NULL
 );
+ALTER TABLE plantao_datas ADD COLUMN auto_approve INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS plantao_posicoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT, data_id INTEGER NOT NULL,
     tipo TEXT NOT NULL, vagas INTEGER NOT NULL DEFAULT 1

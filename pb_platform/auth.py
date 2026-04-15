@@ -97,7 +97,7 @@ def default_redirect_for_user(user: dict | None) -> str:
         return "/plantao/"
     if permissions.get("labmonitor_access"):
         return "/labmonitor/"
-    return "/login"
+    return "/"
 
 
 def has_permission(request: Request, permission: str) -> bool:
