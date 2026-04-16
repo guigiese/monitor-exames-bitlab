@@ -511,3 +511,32 @@ Ao aplicar este padrao:
 - a IA pode ajustar a granularidade dos cenarios.
 
 Essas adaptacoes nao devem violar os principios deste canonico.
+
+## 23. Governanca dos artefatos de teste
+
+`docs/testing/**` e a fonte oficial de verdade para o processo de testes assistidos por IA neste repositorio.
+
+### 23.1. Leitura obrigatoria
+
+Antes de iniciar qualquer tarefa de mapeamento, QA, validacao de modulo ou rodada de testes, a IA deve ler:
+
+- este arquivo;
+- os mapeamentos anteriores relevantes em `docs/testing/mappings/`;
+- as rodadas anteriores relevantes em `docs/testing/runs/`.
+
+### 23.2. Registro obrigatorio
+
+Ao executar esse processo, a IA deve manter o historico governado no repositorio principal:
+
+- todo novo mapeamento deve criar ou atualizar um arquivo em `docs/testing/mappings/`;
+- toda rodada executada deve criar ou atualizar um arquivo em `docs/testing/runs/`;
+- toda mudanca de processo deve atualizar este canônico.
+
+### 23.3. Regra de promocao
+
+Se a IA trabalhar em worktree isolado, branch paralela ou ambiente temporario:
+
+- os arquivos de `docs/testing/**` produzidos ali nao devem ser tratados como oficiais por si so;
+- a promocao para oficial deve ocorrer por integracao controlada no repositorio principal;
+- preferir commit docs-only quando a promocao envolver apenas o historico e o canônico;
+- evitar manter versoes concorrentes do canônico, dos mapeamentos ou das rodadas em arvores paralelas por longos periodos.

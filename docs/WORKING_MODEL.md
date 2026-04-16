@@ -233,6 +233,24 @@ Update docs when:
 - workflow/process changes;
 - a lesson learned should persist beyond one task.
 
+### 9.1. Testing Docs Governance
+
+`docs/testing/**` is the official source of truth for AI-assisted testing in this repository.
+
+Rules:
+- every AI must read `docs/testing/AI_TESTING_STANDARD.md` before starting any testing, QA, mapping, or module validation task;
+- before starting a new mapping, the AI must inspect `docs/testing/mappings/` for prior context;
+- before starting a new test round, the AI must inspect `docs/testing/runs/` for prior executions and known results;
+- every new mapping must create or update a file in `docs/testing/mappings/`;
+- every new executed round must create or update a file in `docs/testing/runs/`;
+- changes to the testing process itself must update `docs/testing/AI_TESTING_STANDARD.md`;
+- testing docs created in isolated worktrees are not official until promoted back into the main repository history.
+
+Promotion rule:
+- prefer a docs-only commit and controlled integration into the active branch;
+- avoid keeping competing versions of the canon, mappings, or runs across separate worktrees;
+- the main repository copy is the one future sessions should trust.
+
 For third-party systems that are accessed repeatedly across modules:
 - maintain a canonical playbook in `docs/integrations/<system>.md`;
 - keep that playbook short, operational, and safe for fast AI onboarding;
