@@ -1,8 +1,9 @@
 import json
 import re
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pb_platform.storage import store
 
@@ -14,6 +15,20 @@ from notification_settings import (
 )
 
 CONFIG_FILE = Path(__file__).parent.parent / "config.json"
+
+_TZ_BR = ZoneInfo("America/Sao_Paulo")
+
+
+def _to_brasilia(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_TZ_BR)
 
 STATUS_SHORT_LABELS: dict[str, str] = {
     "Pronto": "PRONTO",
@@ -125,22 +140,22 @@ def _split_patient_label(label: str) -> tuple[str, str]:
 def _format_date(raw: str | None) -> str:
     if not raw:
         return ""
+    dt = _to_brasilia(raw)
+    if dt:
+        return dt.strftime("%d/%m/%Y")
     try:
-        return datetime.fromisoformat(raw).strftime("%d/%m/%Y")
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%d/%m/%Y")
     except Exception:
-        try:
-            return datetime.strptime(raw, "%Y-%m-%d").strftime("%d/%m/%Y")
-        except Exception:
-            return raw
+        return raw
 
 
 def _format_time(raw: str | None) -> str:
     if not raw:
         return ""
-    try:
-        return datetime.fromisoformat(raw).strftime("%H:%M")
-    except Exception:
-        return ""
+    dt = _to_brasilia(raw)
+    if dt:
+        return dt.strftime("%H:%M")
+    return ""
 
 
 def _format_release_display(raw: str | None) -> str | None:
@@ -220,6 +235,9 @@ def _item_has_usable_result(item: dict) -> bool:
 
 def _item_group_status(item: dict) -> str:
     status = normalize_status(item.get("status", ""))
+    pub = item.get("publication_status", "")
+    if pub == "processing":
+        return "Em Andamento"
     if status == "Inconsistente":
         return "Em Andamento"
     return status

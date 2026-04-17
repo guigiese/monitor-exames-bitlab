@@ -324,10 +324,15 @@ class NexioConnector(LabConnector):
 
         merged: dict[str, dict] = {}
         seen_ids: set[str] = set()
-        for exames in (
-            self._buscar_exames(session, data_recepcao=range_value),
-            self._buscar_exames(session, data_liberacao=range_value),
+        for busca_kwargs in (
+            {"data_recepcao": range_value},
+            {"data_liberacao": range_value},
         ):
+            try:
+                exames = self._buscar_exames(session, **busca_kwargs)
+            except Exception as e:
+                print(f"  [Nexio backfill] busca {busca_kwargs} falhou: {e}")
+                continue
             for exame in exames:
                 exam_key = exame.get("numero") or exame.get("exame_id")
                 if not exam_key or exam_key in seen_ids:
