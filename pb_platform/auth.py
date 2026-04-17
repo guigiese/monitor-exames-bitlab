@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 from fastapi import Request
@@ -23,7 +24,18 @@ PUBLIC_PATH_PREFIXES = (
 
 # ── CSRF ──────────────────────────────────────────────────────────────────────
 
-_CSRF_SECRET = settings.csrf_secret or os.environ.get("PB_CSRF_SECRET") or secrets.token_hex(32)
+def _generate_stable_secret() -> str:
+    """Lê/gera CSRF secret persistido em runtime-data/.csrf_secret para sobreviver restarts."""
+    secret_path = Path(settings.data_dir) / ".csrf_secret"
+    if secret_path.exists():
+        return secret_path.read_text(encoding="utf-8").strip()
+    new_secret = secrets.token_hex(32)
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    secret_path.write_text(new_secret, encoding="utf-8")
+    return new_secret
+
+
+_CSRF_SECRET = settings.csrf_secret or os.environ.get("PB_CSRF_SECRET") or _generate_stable_secret()
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FORM_FIELD = "csrf_token"
 

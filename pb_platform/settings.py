@@ -64,10 +64,7 @@ class PlatformSettings:
     master_password: str = os.environ.get("PB_MASTER_PASSWORD", "")
     master_force_change: bool = _bool_env("PB_MASTER_FORCE_CHANGE", False)
     allow_legacy_sqlite_runtime: bool = _bool_env("PB_ALLOW_LEGACY_SQLITE_RUNTIME", False)
-    local_dev_database_url: str = os.environ.get(
-        "PB_DEV_DATABASE_URL",
-        "postgresql+psycopg2://pinkblue:change-me-dev@localhost:5432/pinkblue_dev",
-    )
+    local_dev_database_url: str = os.environ.get("PB_DEV_DATABASE_URL", "")
 
     @property
     def legacy_db_path(self) -> Path:
